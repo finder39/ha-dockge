@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity
+from datetime import datetime
+
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
@@ -35,6 +37,8 @@ async def async_setup_entry(
             DockgeUpdatesAvailableSensor(coordinator, entry, endpoint, name),
             DockgeSchedulerStatusSensor(coordinator, entry, endpoint, name),
             DockgeLastUpdateSensor(coordinator, entry, endpoint, name),
+            DockgeNextAutoUpdateSensor(coordinator, entry, endpoint, name),
+            DockgeNextImageCheckSensor(coordinator, entry, endpoint, name),
         ])
 
     # Per-container sensors (dynamically tracked)
@@ -244,3 +248,59 @@ class DockgeLastUpdateSensor(CoordinatorEntity, SensorEntity):
             "trigger": entry.get("triggerType"),
             "duration_ms": entry.get("durationMs"),
         }
+
+
+class DockgeNextAutoUpdateSensor(CoordinatorEntity, SensorEntity):
+    """Sensor showing the next scheduled auto-update time."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-fast"
+
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        endpoint: str, agent_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_next_auto_update_{endpoint}"
+        self._attr_name = "Next Auto Update"
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+
+    @property
+    def native_value(self) -> datetime | None:
+        scheduler = self.coordinator.data.get("scheduler") or {}
+        iso = scheduler.get("nextAutoUpdate")
+        if not iso:
+            return None
+        try:
+            return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+
+
+class DockgeNextImageCheckSensor(CoordinatorEntity, SensorEntity):
+    """Sensor showing the next image update check time."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:magnify-scan"
+
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        endpoint: str, agent_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_next_image_check_{endpoint}"
+        self._attr_name = "Next Image Check"
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+
+    @property
+    def native_value(self) -> datetime | None:
+        scheduler = self.coordinator.data.get("scheduler") or {}
+        iso = scheduler.get("nextImageCheck")
+        if not iso:
+            return None
+        try:
+            return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
