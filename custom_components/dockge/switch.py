@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import DockgeCoordinator
+from .devices import agent_display_name, stack_device_info
 
 
 async def async_setup_entry(
@@ -22,13 +23,16 @@ async def async_setup_entry(
     @callback
     def _async_add_new_entities() -> None:
         stacks = coordinator.data.get("stacks") or []
+        agent_names = coordinator.data.get("agent_names", {})
         new_entities = []
         for stack in stacks:
             key = f"{stack.get('endpoint', '')}|{stack['name']}"
             if key not in tracked:
                 tracked.add(key)
+                endpoint = stack.get("endpoint", "")
+                name = agent_display_name(agent_names, endpoint)
                 new_entities.append(
-                    DockgeAutoUpdateSwitch(coordinator, entry, stack)
+                    DockgeAutoUpdateSwitch(coordinator, entry, stack, name)
                 )
         if new_entities:
             async_add_entities(new_entities)
@@ -37,29 +41,24 @@ async def async_setup_entry(
     entry.async_on_unload(coordinator.async_add_listener(_async_add_new_entities))
 
 
-def _agent_display_name(coordinator: DockgeCoordinator, endpoint: str) -> str:
-    agent_names = coordinator.data.get("agent_names", {})
-    return agent_names.get(endpoint, endpoint or "primary")
-
-
 class DockgeAutoUpdateSwitch(CoordinatorEntity, SwitchEntity):
     """Switch to toggle auto-update for a stack."""
 
+    _attr_has_entity_name = True
     _attr_icon = "mdi:autorenew"
 
     def __init__(
-        self, coordinator: DockgeCoordinator, entry: ConfigEntry, stack: dict
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        stack: dict, agent_name: str,
     ) -> None:
         super().__init__(coordinator)
         self._stack_name = stack["name"]
         self._endpoint = stack.get("endpoint", "")
         self._attr_unique_id = f"{entry.entry_id}_auto_update_{self._endpoint}_{self._stack_name}"
-
-        agent_label = _agent_display_name(coordinator, self._endpoint)
-        if coordinator.data.get("multi_agent"):
-            self._attr_name = f"Dockge {self._stack_name} ({agent_label}) Auto Update"
-        else:
-            self._attr_name = f"Dockge {self._stack_name} Auto Update"
+        self._attr_name = "Auto Update"
+        self._attr_device_info = stack_device_info(
+            entry.entry_id, self._endpoint, self._stack_name, agent_name,
+        )
 
     def _get_stack(self) -> dict | None:
         for s in self.coordinator.data.get("stacks") or []:

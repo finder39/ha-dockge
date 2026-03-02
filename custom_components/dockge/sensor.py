@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import DockgeCoordinator
+from .devices import agent_device_info, agent_display_name
 
 
 async def async_setup_entry(
@@ -17,48 +18,74 @@ async def async_setup_entry(
 ) -> None:
     """Set up Dockge sensors."""
     coordinator: DockgeCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([
-        DockgeUpdatesAvailableSensor(coordinator, entry),
-        DockgeSchedulerStatusSensor(coordinator, entry),
-        DockgeLastUpdateSensor(coordinator, entry),
-    ])
+
+    # Create global sensors for each agent endpoint
+    entities: list[SensorEntity] = []
+    agents = coordinator.data.get("agents") or []
+    agent_names = coordinator.data.get("agent_names", {})
+
+    # If no agents returned, create sensors under a default "Primary" agent
+    if not agents:
+        agents = [{"endpoint": ""}]
+
+    for agent in agents:
+        endpoint = agent.get("endpoint", "")
+        name = agent_display_name(agent_names, endpoint)
+        entities.extend([
+            DockgeUpdatesAvailableSensor(coordinator, entry, endpoint, name),
+            DockgeSchedulerStatusSensor(coordinator, entry, endpoint, name),
+            DockgeLastUpdateSensor(coordinator, entry, endpoint, name),
+        ])
+
+    async_add_entities(entities)
 
 
 class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
-    """Sensor showing count of stacks with available image updates (across all agents)."""
+    """Sensor showing count of stacks with available image updates."""
 
+    _attr_has_entity_name = True
     _attr_icon = "mdi:update"
+    _attr_translation_key = "updates_available"
 
-    def __init__(self, coordinator: DockgeCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        endpoint: str, agent_name: str,
+    ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_updates_available"
-        self._attr_name = "Dockge Updates Available"
+        self._endpoint = endpoint
+        self._attr_unique_id = f"{entry.entry_id}_updates_available_{endpoint}"
+        self._attr_name = "Updates Available"
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
 
     @property
     def native_value(self) -> int:
         stacks = self.coordinator.data.get("stacks") or []
-        return sum(1 for s in stacks if s.get("imageUpdatesAvailable"))
+        return sum(
+            1 for s in stacks
+            if s.get("imageUpdatesAvailable") and s.get("endpoint", "") == self._endpoint
+        )
 
     @property
     def extra_state_attributes(self) -> dict:
         stacks = self.coordinator.data.get("stacks") or []
-        total = len(stacks)
-        agents = self.coordinator.data.get("agents") or []
-        return {
-            "total_stacks": total,
-            "total_agents": len(agents),
-        }
+        agent_stacks = [s for s in stacks if s.get("endpoint", "") == self._endpoint]
+        return {"total_stacks": len(agent_stacks)}
 
 
 class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
     """Sensor showing scheduler enabled/disabled status."""
 
+    _attr_has_entity_name = True
     _attr_icon = "mdi:clock-outline"
 
-    def __init__(self, coordinator: DockgeCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        endpoint: str, agent_name: str,
+    ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_scheduler_status"
-        self._attr_name = "Dockge Scheduler"
+        self._attr_unique_id = f"{entry.entry_id}_scheduler_status_{endpoint}"
+        self._attr_name = "Scheduler"
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
 
     @property
     def native_value(self) -> str:
@@ -78,12 +105,17 @@ class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
 class DockgeLastUpdateSensor(CoordinatorEntity, SensorEntity):
     """Sensor showing timestamp of the most recent update."""
 
+    _attr_has_entity_name = True
     _attr_icon = "mdi:history"
 
-    def __init__(self, coordinator: DockgeCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        endpoint: str, agent_name: str,
+    ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_last_update"
-        self._attr_name = "Dockge Last Update"
+        self._attr_unique_id = f"{entry.entry_id}_last_update_{endpoint}"
+        self._attr_name = "Last Update"
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
 
     @property
     def native_value(self) -> str | None:
