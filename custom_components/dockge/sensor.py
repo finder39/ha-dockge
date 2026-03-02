@@ -121,14 +121,29 @@ class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         return self.coordinator.last_update_success and self._get_service() is not None
 
+    @staticmethod
+    def _split_image(image: str) -> tuple[str, str]:
+        """Split 'registry/name:tag' into (name, tag)."""
+        if ":" in image and not image.endswith(":"):
+            name, tag = image.rsplit(":", 1)
+            # Avoid splitting on port numbers (e.g. registry:5000/image)
+            if "/" in tag:
+                return image, "latest"
+            return name, tag
+        return image, "latest"
+
     @property
     def extra_state_attributes(self) -> dict:
         svc = self._get_service()
         if not svc:
             return {}
+        image = svc.get("image", "")
+        image_name, image_tag = self._split_image(image)
         return {
             "container_name": svc.get("containerName"),
-            "image": svc.get("image"),
+            "image": image,
+            "image_name": image_name,
+            "image_tag": image_tag,
             "status": svc.get("status"),
             "health": svc.get("health"),
             "image_update_available": svc.get("imageUpdateAvailable", False),
