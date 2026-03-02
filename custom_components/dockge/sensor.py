@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import DockgeCoordinator
-from .devices import agent_device_info, agent_display_name
+from .devices import agent_device_info, agent_display_name, stack_device_info
 
 
 async def async_setup_entry(
@@ -19,12 +20,11 @@ async def async_setup_entry(
     """Set up Dockge sensors."""
     coordinator: DockgeCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    # Create global sensors for each agent endpoint
+    # Agent-level sensors
     entities: list[SensorEntity] = []
     agents = coordinator.data.get("agents") or []
     agent_names = coordinator.data.get("agent_names", {})
 
-    # If no agents returned, create sensors under a default "Primary" agent
     if not agents:
         agents = [{"endpoint": ""}]
 
@@ -37,7 +37,102 @@ async def async_setup_entry(
             DockgeLastUpdateSensor(coordinator, entry, endpoint, name),
         ])
 
+    # Per-container sensors (dynamically tracked)
+    tracked_containers: set[str] = set()
+
+    @callback
+    def _async_add_new_container_sensors() -> None:
+        stacks = coordinator.data.get("stacks") or []
+        names = coordinator.data.get("agent_names", {})
+        new_entities: list[SensorEntity] = []
+        for stack in stacks:
+            endpoint = stack.get("endpoint", "")
+            aname = agent_display_name(names, endpoint)
+            services = stack.get("services") or {}
+            for svc_name, svc_data in services.items():
+                key = f"{endpoint}|{stack['name']}|{svc_name}"
+                if key not in tracked_containers:
+                    tracked_containers.add(key)
+                    new_entities.append(
+                        DockgeContainerSensor(
+                            coordinator, entry, stack["name"],
+                            endpoint, aname, svc_name, svc_data,
+                        )
+                    )
+        if new_entities:
+            async_add_entities(new_entities)
+
+    # Add initial containers
+    stacks = coordinator.data.get("stacks") or []
+    for stack in stacks:
+        endpoint = stack.get("endpoint", "")
+        aname = agent_display_name(agent_names, endpoint)
+        services = stack.get("services") or {}
+        for svc_name, svc_data in services.items():
+            key = f"{endpoint}|{stack['name']}|{svc_name}"
+            tracked_containers.add(key)
+            entities.append(
+                DockgeContainerSensor(
+                    coordinator, entry, stack["name"],
+                    endpoint, aname, svc_name, svc_data,
+                )
+            )
+
     async_add_entities(entities)
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_new_container_sensors))
+
+
+class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
+    """Sensor representing an individual container within a stack."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:docker"
+
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        stack_name: str, endpoint: str, agent_name: str,
+        service_name: str, service_data: dict,
+    ) -> None:
+        super().__init__(coordinator)
+        self._stack_name = stack_name
+        self._endpoint = endpoint
+        self._service_name = service_name
+        self._attr_unique_id = f"{entry.entry_id}_container_{endpoint}_{stack_name}_{service_name}"
+        self._attr_name = service_name
+        self._attr_device_info = stack_device_info(
+            entry.entry_id, endpoint, stack_name, agent_name,
+        )
+
+    def _get_service(self) -> dict | None:
+        for s in self.coordinator.data.get("stacks") or []:
+            if s["name"] == self._stack_name and s.get("endpoint", "") == self._endpoint:
+                services = s.get("services") or {}
+                return services.get(self._service_name)
+        return None
+
+    @property
+    def native_value(self) -> str | None:
+        svc = self._get_service()
+        if not svc:
+            return None
+        return svc.get("state")
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success and self._get_service() is not None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        svc = self._get_service()
+        if not svc:
+            return {}
+        return {
+            "container_name": svc.get("containerName"),
+            "image": svc.get("image"),
+            "status": svc.get("status"),
+            "health": svc.get("health"),
+            "image_update_available": svc.get("imageUpdateAvailable", False),
+        }
 
 
 class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
@@ -45,7 +140,6 @@ class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:update"
-    _attr_translation_key = "updates_available"
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
