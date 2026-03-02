@@ -38,6 +38,9 @@ async def async_setup_entry(
                 new_entities.append(
                     DockgeUpdateStackButton(coordinator, entry, stack)
                 )
+                new_entities.append(
+                    DockgeCheckUpdatesButton(coordinator, entry, stack)
+                )
         if new_entities:
             async_add_entities(new_entities)
 
@@ -47,6 +50,7 @@ async def async_setup_entry(
         key = f"{stack.get('endpoint', '')}|{stack['name']}"
         tracked.add(key)
         entities.append(DockgeUpdateStackButton(coordinator, entry, stack))
+        entities.append(DockgeCheckUpdatesButton(coordinator, entry, stack))
 
     async_add_entities(entities)
 
@@ -82,6 +86,33 @@ class DockgeUpdateStackButton(CoordinatorEntity, ButtonEntity):
         endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
         await self.coordinator.api_call(
             "POST", f"/api/stacks/{self._stack_name}/update{endpoint_param}"
+        )
+        await self.coordinator.async_request_refresh()
+
+
+class DockgeCheckUpdatesButton(CoordinatorEntity, ButtonEntity):
+    """Button to force check for image updates on a single stack."""
+
+    _attr_icon = "mdi:magnify"
+
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry, stack: dict
+    ) -> None:
+        super().__init__(coordinator)
+        self._stack_name = stack["name"]
+        self._endpoint = stack.get("endpoint", "")
+        self._attr_unique_id = f"{entry.entry_id}_check_updates_{self._endpoint}_{self._stack_name}"
+
+        agent_label = _agent_display_name(coordinator, self._endpoint)
+        if coordinator.data.get("multi_agent"):
+            self._attr_name = f"Dockge Check Updates {self._stack_name} ({agent_label})"
+        else:
+            self._attr_name = f"Dockge Check Updates {self._stack_name}"
+
+    async def async_press(self) -> None:
+        endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
+        await self.coordinator.api_call(
+            "POST", f"/api/stacks/{self._stack_name}/check-updates{endpoint_param}"
         )
         await self.coordinator.async_request_refresh()
 
