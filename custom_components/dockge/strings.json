@@ -12,7 +12,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to Dockge. Check URL and API key.",
+      "cannot_connect": "Failed to connect to Dockge. Check the URL.",
+      "invalid_auth": "Invalid API key.",
       "unknown": "Unexpected error occurred."
     },
     "abort": {

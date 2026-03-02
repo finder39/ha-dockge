@@ -37,17 +37,22 @@ class DockgeConfigFlow(ConfigFlow, domain=DOMAIN):
 
             try:
                 async with aiohttp.ClientSession() as session:
+                    # Use /api/agents (authenticated) to validate both URL and API key
                     async with session.get(
-                        f"{url}/api/health",
+                        f"{url}/api/agents",
                         headers={"X-API-Key": api_key},
                         timeout=aiohttp.ClientTimeout(total=10),
                     ) as resp:
-                        resp.raise_for_status()
+                        if resp.status == 401:
+                            errors["base"] = "invalid_auth"
+                        else:
+                            resp.raise_for_status()
             except aiohttp.ClientError:
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 errors["base"] = "unknown"
-            else:
+
+            if not errors:
                 await self.async_set_unique_id(url)
                 self._abort_if_unique_id_configured()
 

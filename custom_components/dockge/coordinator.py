@@ -112,8 +112,9 @@ class DockgeCoordinator(DataUpdateCoordinator):
                     timeout=aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     resp.raise_for_status()
-                    if resp.content_length and resp.content_length > 0:
+                    try:
                         return await resp.json()
-                    return None
+                    except (aiohttp.ContentTypeError, ValueError):
+                        return None
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Dockge API call failed: {err}") from err

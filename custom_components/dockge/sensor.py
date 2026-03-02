@@ -69,10 +69,9 @@ class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         scheduler = self.coordinator.data.get("scheduler") or {}
         return {
-            "cron": scheduler.get("cron"),
-            "next_run": scheduler.get("nextRun"),
-            "prune_enabled": scheduler.get("pruneEnabled"),
-            "prune_all": scheduler.get("pruneAll"),
+            "cron_expression": scheduler.get("cronExpression"),
+            "prune_after_update": scheduler.get("pruneAfterUpdate"),
+            "prune_all_after_update": scheduler.get("pruneAllAfterUpdate"),
         }
 
 

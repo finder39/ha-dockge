@@ -6,6 +6,6 @@
   "dependencies": [],
   "documentation": "https://github.com/louislam/dockge",
   "iot_class": "local_polling",
-  "requirements": ["aiohttp"],
+  "requirements": [],
   "version": "1.0.0"
 }
