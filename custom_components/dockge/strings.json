@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Dockge",
+        "description": "Enter the URL and API key for your Dockge instance.",
+        "data": {
+          "url": "URL",
+          "api_key": "API Key",
+          "scan_interval": "Scan interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Dockge. Check URL and API key.",
+      "unknown": "Unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This Dockge instance is already configured."
+    }
+  }
+}

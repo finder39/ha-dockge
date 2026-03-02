@@ -1,0 +1,11 @@
+{
+  "domain": "dockge",
+  "name": "Dockge",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/louislam/dockge",
+  "iot_class": "local_polling",
+  "requirements": ["aiohttp"],
+  "version": "1.0.0"
+}
