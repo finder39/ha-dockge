@@ -26,6 +26,7 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     agents = coordinator.data.get("agents") or []
     agent_names = coordinator.data.get("agent_names", {})
+    multi_agent = coordinator.data.get("multi_agent", False)
 
     if not agents:
         agents = [{"endpoint": ""}]
@@ -34,11 +35,11 @@ async def async_setup_entry(
         endpoint = agent.get("endpoint", "")
         name = agent_display_name(agent_names, endpoint)
         entities.extend([
-            DockgeUpdatesAvailableSensor(coordinator, entry, endpoint, name),
-            DockgeSchedulerStatusSensor(coordinator, entry, endpoint, name),
-            DockgeLastUpdateSensor(coordinator, entry, endpoint, name),
-            DockgeNextAutoUpdateSensor(coordinator, entry, endpoint, name),
-            DockgeNextImageCheckSensor(coordinator, entry, endpoint, name),
+            DockgeUpdatesAvailableSensor(coordinator, entry, endpoint, name, multi_agent),
+            DockgeSchedulerStatusSensor(coordinator, entry, endpoint, name, multi_agent),
+            DockgeLastUpdateSensor(coordinator, entry, endpoint, name, multi_agent),
+            DockgeNextAutoUpdateSensor(coordinator, entry, endpoint, name, multi_agent),
+            DockgeNextImageCheckSensor(coordinator, entry, endpoint, name, multi_agent),
         ])
 
     # Per-container sensors (dynamically tracked)
@@ -161,13 +162,13 @@ class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._endpoint = endpoint
         self._attr_unique_id = f"{entry.entry_id}_updates_available_{endpoint}"
         self._attr_name = "Updates Available"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
     def native_value(self) -> int:
@@ -192,12 +193,12 @@ class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_scheduler_status_{endpoint}"
         self._attr_name = "Scheduler"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
     def native_value(self) -> str:
@@ -222,12 +223,12 @@ class DockgeLastUpdateSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_last_update_{endpoint}"
         self._attr_name = "Last Update"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
     def native_value(self) -> str | None:
@@ -259,12 +260,12 @@ class DockgeNextAutoUpdateSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_next_auto_update_{endpoint}"
         self._attr_name = "Next Auto Update"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
     def native_value(self) -> datetime | None:
@@ -287,12 +288,12 @@ class DockgeNextImageCheckSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_next_image_check_{endpoint}"
         self._attr_name = "Next Image Check"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
     def native_value(self) -> datetime | None:

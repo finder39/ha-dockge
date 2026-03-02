@@ -23,6 +23,7 @@ async def async_setup_entry(
     entities: list[ButtonEntity] = []
     agents = coordinator.data.get("agents") or []
     agent_names = coordinator.data.get("agent_names", {})
+    multi_agent = coordinator.data.get("multi_agent", False)
 
     if not agents:
         agents = [{"endpoint": ""}]
@@ -31,8 +32,8 @@ async def async_setup_entry(
         endpoint = agent.get("endpoint", "")
         name = agent_display_name(agent_names, endpoint)
         entities.extend([
-            DockgeUpdateAllButton(coordinator, entry, endpoint, name),
-            DockgeTriggerScheduledButton(coordinator, entry, endpoint, name),
+            DockgeUpdateAllButton(coordinator, entry, endpoint, name, multi_agent),
+            DockgeTriggerScheduledButton(coordinator, entry, endpoint, name, multi_agent),
         ])
 
     # Per-stack buttons (dynamically tracked)
@@ -134,13 +135,13 @@ class DockgeUpdateAllButton(CoordinatorEntity, ButtonEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._endpoint = endpoint
         self._attr_unique_id = f"{entry.entry_id}_update_all_{endpoint}"
         self._attr_name = "Update All"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     async def async_press(self) -> None:
         endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
@@ -156,12 +157,12 @@ class DockgeTriggerScheduledButton(CoordinatorEntity, ButtonEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_trigger_scheduled_{endpoint}"
         self._attr_name = "Trigger Scheduled Run"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name)
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     async def async_press(self) -> None:
         await self.coordinator.api_call("POST", "/api/scheduler/trigger")

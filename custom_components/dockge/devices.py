@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
@@ -12,14 +13,20 @@ def agent_display_name(agent_names: dict[str, str], endpoint: str) -> str:
     return agent_names.get(endpoint, endpoint or "Primary")
 
 
-def agent_device_info(entry_id: str, endpoint: str, agent_name: str) -> DeviceInfo:
+def agent_device_info(
+    entry_id: str, endpoint: str, agent_name: str, *, multi_agent: bool = False,
+) -> DeviceInfo:
     """Return DeviceInfo for an agent (server-level) device."""
+    if multi_agent:
+        name = f"Dockge Server ({agent_name})"
+    else:
+        name = "Dockge Server"
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry_id}_{endpoint}")},
-        name=f"Dockge - {agent_name}",
+        name=name,
         manufacturer="Dockge",
         model="Docker Compose Manager",
-        entry_type=None,
+        entry_type=DeviceEntryType.SERVICE,
     )
 
 
