@@ -7,7 +7,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -18,13 +18,36 @@ from .coordinator import DockgeCoordinator
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up Dockge binary sensors (one per stack)."""
+    """Set up Dockge binary sensors (one per stack, dynamically tracked)."""
     coordinator: DockgeCoordinator = hass.data[DOMAIN][entry.entry_id]
-    stacks = coordinator.data.get("stacks") or []
-    async_add_entities([
-        DockgeStackUpdateAvailableBinarySensor(coordinator, entry, stack)
-        for stack in stacks
-    ])
+    tracked: set[str] = set()
+
+    @callback
+    def _async_add_new_entities() -> None:
+        """Add entities for any new stacks found in coordinator data."""
+        stacks = coordinator.data.get("stacks") or []
+        new_entities = []
+        for stack in stacks:
+            key = f"{stack.get('endpoint', '')}|{stack['name']}"
+            if key not in tracked:
+                tracked.add(key)
+                new_entities.append(
+                    DockgeStackUpdateAvailableBinarySensor(coordinator, entry, stack)
+                )
+        if new_entities:
+            async_add_entities(new_entities)
+
+    # Add initial entities
+    _async_add_new_entities()
+
+    # Listen for coordinator updates to add new stacks dynamically
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_new_entities))
+
+
+def _agent_display_name(coordinator: DockgeCoordinator, endpoint: str) -> str:
+    """Get the display name for an agent endpoint."""
+    agent_names = coordinator.data.get("agent_names", {})
+    return agent_names.get(endpoint, endpoint or "primary")
 
 
 class DockgeStackUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -39,7 +62,13 @@ class DockgeStackUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensorEnti
         self._stack_name = stack["name"]
         self._endpoint = stack.get("endpoint", "")
         self._attr_unique_id = f"{entry.entry_id}_stack_{self._endpoint}_{self._stack_name}"
-        self._attr_name = f"Dockge {self._stack_name} Update Available"
+
+        # Include agent name in entity name when multi-agent
+        agent_label = _agent_display_name(coordinator, self._endpoint)
+        if coordinator.data.get("multi_agent"):
+            self._attr_name = f"Dockge {self._stack_name} ({agent_label}) Update Available"
+        else:
+            self._attr_name = f"Dockge {self._stack_name} Update Available"
 
     def _get_stack(self) -> dict | None:
         for s in self.coordinator.data.get("stacks") or []:
@@ -53,12 +82,18 @@ class DockgeStackUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensorEnti
         return bool(stack and stack.get("imageUpdatesAvailable"))
 
     @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success and self._get_stack() is not None
+
+    @property
     def extra_state_attributes(self) -> dict:
         stack = self._get_stack()
+        agent_name = _agent_display_name(self.coordinator, self._endpoint)
         if not stack:
-            return {"endpoint": self._endpoint}
+            return {"endpoint": self._endpoint, "agent": agent_name}
         return {
             "endpoint": self._endpoint,
+            "agent": agent_name,
             "auto_update_enabled": stack.get("autoUpdate", False),
             "status": stack.get("status"),
         }

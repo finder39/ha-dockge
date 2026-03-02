@@ -25,7 +25,7 @@ async def async_setup_entry(
 
 
 class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
-    """Sensor showing count of stacks with available image updates."""
+    """Sensor showing count of stacks with available image updates (across all agents)."""
 
     _attr_icon = "mdi:update"
 
@@ -38,6 +38,16 @@ class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
     def native_value(self) -> int:
         stacks = self.coordinator.data.get("stacks") or []
         return sum(1 for s in stacks if s.get("imageUpdatesAvailable"))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        stacks = self.coordinator.data.get("stacks") or []
+        total = len(stacks)
+        agents = self.coordinator.data.get("agents") or []
+        return {
+            "total_stacks": total,
+            "total_agents": len(agents),
+        }
 
 
 class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
@@ -62,7 +72,7 @@ class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
             "cron": scheduler.get("cron"),
             "next_run": scheduler.get("nextRun"),
             "prune_enabled": scheduler.get("pruneEnabled"),
-            "prune_endpoints": scheduler.get("pruneEndpoints"),
+            "prune_all": scheduler.get("pruneAll"),
         }
 
 
@@ -81,7 +91,7 @@ class DockgeLastUpdateSensor(CoordinatorEntity, SensorEntity):
         entry = self.coordinator.data.get("last_update")
         if not entry:
             return None
-        return entry.get("timestamp")
+        return entry.get("completedAt") or entry.get("startedAt")
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -90,6 +100,8 @@ class DockgeLastUpdateSensor(CoordinatorEntity, SensorEntity):
             return {}
         return {
             "stack": entry.get("stackName"),
+            "endpoint": entry.get("endpoint", ""),
             "success": entry.get("success"),
-            "trigger": entry.get("trigger"),
+            "trigger": entry.get("triggerType"),
+            "duration_ms": entry.get("durationMs"),
         }

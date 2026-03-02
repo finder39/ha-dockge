@@ -35,35 +35,69 @@ class DockgeCoordinator(DataUpdateCoordinator):
     def _headers(self) -> dict[str, str]:
         return {"X-API-Key": self.api_key}
 
+    def _agent_name_map(self, agents: list[dict]) -> dict[str, str]:
+        """Build endpoint -> agent name mapping."""
+        mapping: dict[str, str] = {}
+        for agent in agents:
+            endpoint = agent.get("endpoint", "")
+            name = agent.get("name", "")
+            if name:
+                mapping[endpoint] = name
+        return mapping
+
     async def _async_update_data(self) -> dict:
-        """Fetch stacks and scheduler data from Dockge API."""
+        """Fetch agents, stacks, scheduler, and last update from Dockge API."""
         try:
             async with aiohttp.ClientSession() as session:
+                # Fetch agents (for name mapping)
+                async with session.get(
+                    f"{self.url}/api/agents", headers=self._headers(), timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    resp.raise_for_status()
+                    agents_resp = await resp.json()
+
+                # Fetch all stacks (from all agents)
                 async with session.get(
                     f"{self.url}/api/stacks", headers=self._headers(), timeout=aiohttp.ClientTimeout(total=10)
                 ) as resp:
                     resp.raise_for_status()
-                    stacks = await resp.json()
+                    stacks_resp = await resp.json()
 
+                # Fetch scheduler status
                 async with session.get(
                     f"{self.url}/api/scheduler", headers=self._headers(), timeout=aiohttp.ClientTimeout(total=10)
                 ) as resp:
                     resp.raise_for_status()
-                    scheduler = await resp.json()
+                    scheduler_resp = await resp.json()
 
+                # Fetch most recent update history entry
                 async with session.get(
                     f"{self.url}/api/update-history?limit=1", headers=self._headers(), timeout=aiohttp.ClientTimeout(total=10)
                 ) as resp:
                     resp.raise_for_status()
-                    history = await resp.json()
+                    history_resp = await resp.json()
 
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Error communicating with Dockge API: {err}") from err
 
+        # Unwrap API envelope responses
+        agents = agents_resp.get("agents", []) if isinstance(agents_resp, dict) else []
+        stacks = stacks_resp.get("stacks", []) if isinstance(stacks_resp, dict) else []
+        scheduler = scheduler_resp if isinstance(scheduler_resp, dict) else {}
+        history_entries = history_resp.get("entries", []) if isinstance(history_resp, dict) else []
+        last_update = history_entries[0] if history_entries else None
+
+        # Build agent name map for entity naming
+        agent_names = self._agent_name_map(agents)
+        multi_agent = len(agents) > 1
+
         return {
+            "agents": agents,
+            "agent_names": agent_names,
+            "multi_agent": multi_agent,
             "stacks": stacks,
             "scheduler": scheduler,
-            "last_update": history[0] if history else None,
+            "last_update": last_update,
         }
 
     async def api_call(self, method: str, path: str, json: dict | None = None) -> dict | list | None:
