@@ -3,7 +3,7 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/finder39/ha-dockge.svg)](https://github.com/finder39/ha-dockge/releases/latest)
 
-Home Assistant integration for managing Docker container updates via the [Dockge](https://github.com/louislam/dockge) REST API.
+Home Assistant integration for managing Docker container updates via the [Dockge](https://github.com/finder39/dockge) REST API.
 
 Monitor update availability across all your Docker stacks, toggle auto-updates per stack, and trigger updates — all from within Home Assistant.
 
@@ -23,8 +23,7 @@ Monitor update availability across all your Docker stacks, toggle auto-updates p
 
 This integration requires a Dockge instance with the REST API enabled. You will need:
 
-- A running [Dockge](https://github.com/louislam/dockge) instance
-- The REST API fork with update management endpoints
+- A running [Dockge](https://github.com/finder39/dockge) instance (fork with REST API and update management)
 - An API key configured in Dockge
 
 ## Installation
