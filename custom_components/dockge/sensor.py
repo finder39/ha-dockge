@@ -34,13 +34,17 @@ async def async_setup_entry(
     for agent in agents:
         endpoint = agent.get("endpoint", "")
         name = agent_display_name(agent_names, endpoint)
-        entities.extend([
+        entities.append(
             DockgeUpdatesAvailableSensor(coordinator, entry, endpoint, name, multi_agent),
-            DockgeSchedulerStatusSensor(coordinator, entry, endpoint, name, multi_agent),
-            DockgeLastUpdateSensor(coordinator, entry, endpoint, name, multi_agent),
-            DockgeNextAutoUpdateSensor(coordinator, entry, endpoint, name, multi_agent),
-            DockgeNextImageCheckSensor(coordinator, entry, endpoint, name, multi_agent),
-        ])
+        )
+        # Scheduler, history, and next-run sensors are server-wide (primary only)
+        if endpoint == "":
+            entities.extend([
+                DockgeSchedulerStatusSensor(coordinator, entry, endpoint, name, multi_agent),
+                DockgeLastUpdateSensor(coordinator, entry, endpoint, name, multi_agent),
+                DockgeNextAutoUpdateSensor(coordinator, entry, endpoint, name, multi_agent),
+                DockgeNextImageCheckSensor(coordinator, entry, endpoint, name, multi_agent),
+            ])
 
     # Per-container sensors (dynamically tracked)
     tracked_containers: set[str] = set()
@@ -49,6 +53,7 @@ async def async_setup_entry(
     def _async_add_new_container_sensors() -> None:
         stacks = coordinator.data.get("stacks") or []
         names = coordinator.data.get("agent_names", {})
+        is_multi = coordinator.data.get("multi_agent", False)
         new_entities: list[SensorEntity] = []
         for stack in stacks:
             endpoint = stack.get("endpoint", "")
@@ -62,6 +67,7 @@ async def async_setup_entry(
                         DockgeContainerSensor(
                             coordinator, entry, stack["name"],
                             endpoint, aname, svc_name, svc_data,
+                            multi_agent=is_multi,
                         )
                     )
         if new_entities:
@@ -80,6 +86,7 @@ async def async_setup_entry(
                 DockgeContainerSensor(
                     coordinator, entry, stack["name"],
                     endpoint, aname, svc_name, svc_data,
+                    multi_agent=multi_agent,
                 )
             )
 
@@ -97,6 +104,7 @@ class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
         stack_name: str, endpoint: str, agent_name: str,
         service_name: str, service_data: dict,
+        *, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._stack_name = stack_name
@@ -106,6 +114,7 @@ class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = service_name
         self._attr_device_info = stack_device_info(
             entry.entry_id, endpoint, stack_name, agent_name,
+            multi_agent=multi_agent,
         )
 
     def _get_service(self) -> dict | None:
@@ -166,8 +175,9 @@ class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._endpoint = endpoint
+        self._agent_name = agent_name
         self._attr_unique_id = f"{entry.entry_id}_updates_available_{endpoint}"
-        self._attr_name = "Updates Available"
+        self._attr_name = "Image Updates Available"
         self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
@@ -182,7 +192,10 @@ class DockgeUpdatesAvailableSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         stacks = self.coordinator.data.get("stacks") or []
         agent_stacks = [s for s in stacks if s.get("endpoint", "") == self._endpoint]
-        return {"total_stacks": len(agent_stacks)}
+        attrs = {"total_stacks": len(agent_stacks), "agent_name": self._agent_name}
+        if self._endpoint:
+            attrs["endpoint"] = self._endpoint
+        return attrs
 
 
 class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
@@ -197,7 +210,7 @@ class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_scheduler_status_{endpoint}"
-        self._attr_name = "Scheduler"
+        self._attr_name = "Auto-Update Scheduler"
         self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
@@ -212,6 +225,7 @@ class DockgeSchedulerStatusSensor(CoordinatorEntity, SensorEntity):
             "cron_expression": scheduler.get("cronExpression"),
             "prune_after_update": scheduler.get("pruneAfterUpdate"),
             "prune_all_after_update": scheduler.get("pruneAllAfterUpdate"),
+            "image_check_interval_hours": scheduler.get("imageCheckIntervalHours"),
         }
 
 
@@ -219,6 +233,7 @@ class DockgeLastUpdateSensor(CoordinatorEntity, SensorEntity):
     """Sensor showing timestamp of the most recent update."""
 
     _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:history"
 
     def __init__(
@@ -227,15 +242,21 @@ class DockgeLastUpdateSensor(CoordinatorEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_last_update_{endpoint}"
-        self._attr_name = "Last Update"
+        self._attr_name = "Last Stack Update"
         self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
 
     @property
-    def native_value(self) -> str | None:
+    def native_value(self) -> datetime | None:
         entry = self.coordinator.data.get("last_update")
         if not entry:
             return None
-        return entry.get("completedAt") or entry.get("startedAt")
+        iso = entry.get("completedAt") or entry.get("startedAt")
+        if not iso:
+            return None
+        try:
+            return datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            return None
 
     @property
     def extra_state_attributes(self) -> dict:

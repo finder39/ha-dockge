@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import DockgeCoordinator
-from .devices import agent_device_info, agent_display_name, stack_device_info
+from .devices import agent_display_name, stack_device_info
 
 
 async def async_setup_entry(
@@ -28,14 +28,6 @@ async def async_setup_entry(
     if not agents:
         agents = [{"endpoint": ""}]
 
-    for agent in agents:
-        endpoint = agent.get("endpoint", "")
-        name = agent_display_name(agent_names, endpoint)
-        entities.extend([
-            DockgeUpdateAllButton(coordinator, entry, endpoint, name, multi_agent),
-            DockgeTriggerScheduledButton(coordinator, entry, endpoint, name, multi_agent),
-        ])
-
     # Per-stack buttons (dynamically tracked)
     tracked: set[str] = set()
 
@@ -43,6 +35,7 @@ async def async_setup_entry(
     def _async_add_new_entities() -> None:
         stacks = coordinator.data.get("stacks") or []
         names = coordinator.data.get("agent_names", {})
+        is_multi = coordinator.data.get("multi_agent", False)
         new_entities = []
         for stack in stacks:
             key = f"{stack.get('endpoint', '')}|{stack['name']}"
@@ -51,10 +44,10 @@ async def async_setup_entry(
                 ep = stack.get("endpoint", "")
                 aname = agent_display_name(names, ep)
                 new_entities.append(
-                    DockgeUpdateStackButton(coordinator, entry, stack, aname)
+                    DockgeUpdateStackButton(coordinator, entry, stack, aname, multi_agent=is_multi)
                 )
                 new_entities.append(
-                    DockgeCheckUpdatesButton(coordinator, entry, stack, aname)
+                    DockgeCheckUpdatesButton(coordinator, entry, stack, aname, multi_agent=is_multi)
                 )
         if new_entities:
             async_add_entities(new_entities)
@@ -66,8 +59,8 @@ async def async_setup_entry(
         tracked.add(key)
         ep = stack.get("endpoint", "")
         aname = agent_display_name(agent_names, ep)
-        entities.append(DockgeUpdateStackButton(coordinator, entry, stack, aname))
-        entities.append(DockgeCheckUpdatesButton(coordinator, entry, stack, aname))
+        entities.append(DockgeUpdateStackButton(coordinator, entry, stack, aname, multi_agent=multi_agent))
+        entities.append(DockgeCheckUpdatesButton(coordinator, entry, stack, aname, multi_agent=multi_agent))
 
     async_add_entities(entities)
     entry.async_on_unload(coordinator.async_add_listener(_async_add_new_entities))
@@ -81,7 +74,7 @@ class DockgeUpdateStackButton(CoordinatorEntity, ButtonEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        stack: dict, agent_name: str,
+        stack: dict, agent_name: str, *, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._stack_name = stack["name"]
@@ -90,6 +83,7 @@ class DockgeUpdateStackButton(CoordinatorEntity, ButtonEntity):
         self._attr_name = "Update"
         self._attr_device_info = stack_device_info(
             entry.entry_id, self._endpoint, self._stack_name, agent_name,
+            multi_agent=multi_agent,
         )
 
     async def async_press(self) -> None:
@@ -108,7 +102,7 @@ class DockgeCheckUpdatesButton(CoordinatorEntity, ButtonEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        stack: dict, agent_name: str,
+        stack: dict, agent_name: str, *, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._stack_name = stack["name"]
@@ -117,6 +111,7 @@ class DockgeCheckUpdatesButton(CoordinatorEntity, ButtonEntity):
         self._attr_name = "Check Updates"
         self._attr_device_info = stack_device_info(
             entry.entry_id, self._endpoint, self._stack_name, agent_name,
+            multi_agent=multi_agent,
         )
 
     async def async_press(self) -> None:
@@ -124,46 +119,4 @@ class DockgeCheckUpdatesButton(CoordinatorEntity, ButtonEntity):
         await self.coordinator.api_call(
             "POST", f"/api/stacks/{self._stack_name}/check-updates{endpoint_param}"
         )
-        await self.coordinator.async_request_refresh()
-
-
-class DockgeUpdateAllButton(CoordinatorEntity, ButtonEntity):
-    """Button to trigger update for all stacks."""
-
-    _attr_has_entity_name = True
-    _attr_icon = "mdi:package-variant-closed-plus"
-
-    def __init__(
-        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str, multi_agent: bool = False,
-    ) -> None:
-        super().__init__(coordinator)
-        self._endpoint = endpoint
-        self._attr_unique_id = f"{entry.entry_id}_update_all_{endpoint}"
-        self._attr_name = "Update All"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
-
-    async def async_press(self) -> None:
-        endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
-        await self.coordinator.api_call("POST", f"/api/update-all{endpoint_param}")
-        await self.coordinator.async_request_refresh()
-
-
-class DockgeTriggerScheduledButton(CoordinatorEntity, ButtonEntity):
-    """Button to trigger the scheduled update run."""
-
-    _attr_has_entity_name = True
-    _attr_icon = "mdi:clock-start"
-
-    def __init__(
-        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        endpoint: str, agent_name: str, multi_agent: bool = False,
-    ) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_trigger_scheduled_{endpoint}"
-        self._attr_name = "Trigger Scheduled Run"
-        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
-
-    async def async_press(self) -> None:
-        await self.coordinator.api_call("POST", "/api/scheduler/trigger")
         await self.coordinator.async_request_refresh()

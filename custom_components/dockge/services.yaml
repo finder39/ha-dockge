@@ -1,0 +1,99 @@
+start_stack:
+  name: Start Stack
+  description: Start a Docker Compose stack
+  fields:
+    stack_name:
+      name: Stack Name
+      description: Name of the stack to start
+      required: true
+      selector:
+        text:
+    agent:
+      name: Agent
+      description: Agent name, e.g. "Gastly" (leave empty for primary server)
+      default: ""
+      selector:
+        text:
+
+stop_stack:
+  name: Stop Stack
+  description: Stop a Docker Compose stack
+  fields:
+    stack_name:
+      name: Stack Name
+      description: Name of the stack to stop
+      required: true
+      selector:
+        text:
+    agent:
+      name: Agent
+      description: Agent name, e.g. "Gastly" (leave empty for primary server)
+      default: ""
+      selector:
+        text:
+
+restart_stack:
+  name: Restart Stack
+  description: Restart a Docker Compose stack
+  fields:
+    stack_name:
+      name: Stack Name
+      description: Name of the stack to restart
+      required: true
+      selector:
+        text:
+    agent:
+      name: Agent
+      description: Agent name, e.g. "Gastly" (leave empty for primary server)
+      default: ""
+      selector:
+        text:
+
+update_stack:
+  name: Update Stack
+  description: Pull latest images and recreate a Docker Compose stack
+  fields:
+    stack_name:
+      name: Stack Name
+      description: Name of the stack to update
+      required: true
+      selector:
+        text:
+    agent:
+      name: Agent
+      description: Agent name, e.g. "Gastly" (leave empty for primary server)
+      default: ""
+      selector:
+        text:
+
+check_updates:
+  name: Check Updates
+  description: Force check for image updates on a stack
+  fields:
+    stack_name:
+      name: Stack Name
+      description: Name of the stack to check
+      required: true
+      selector:
+        text:
+    agent:
+      name: Agent
+      description: Agent name, e.g. "Gastly" (leave empty for primary server)
+      default: ""
+      selector:
+        text:
+
+update_all:
+  name: Update All
+  description: Update all stacks on a specific agent or all agents
+  fields:
+    agent:
+      name: Agent
+      description: Agent name, e.g. "Gastly" (leave empty for all agents)
+      default: ""
+      selector:
+        text:
+
+trigger_auto_updates:
+  name: Trigger Auto Updates
+  description: Run auto-updates on all stacks that have auto-update enabled
