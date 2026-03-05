@@ -112,32 +112,62 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def _cleanup_stale_devices(
     hass: HomeAssistant, entry: ConfigEntry, coordinator: DockgeCoordinator
 ) -> None:
-    """Remove devices for stacks/agents that no longer exist."""
+    """Remove devices and entities that no longer exist."""
     device_reg = dr.async_get(hass)
     entity_reg = er.async_get(hass)
 
-    # Build set of active device identifiers from current coordinator data
-    active_ids: set[tuple[str, str]] = set()
     agents = coordinator.data.get("agents") or []
+    stacks = coordinator.data.get("stacks") or []
+
+    # Build set of active device identifiers
+    active_ids: set[tuple[str, str]] = set()
     for agent in agents:
         ep = agent.get("endpoint", "")
         active_ids.add((DOMAIN, f"{entry.entry_id}_{ep}"))
-    stacks = coordinator.data.get("stacks") or []
     for stack in stacks:
         ep = stack.get("endpoint", "")
         active_ids.add((DOMAIN, f"{entry.entry_id}_{ep}_{stack['name']}"))
 
-    # Find and remove devices that belong to this entry but are no longer active
+    # Build set of valid entity unique_ids
+    eid = entry.entry_id
+    valid_unique_ids: set[str] = set()
+
+    for agent in agents:
+        ep = agent.get("endpoint", "")
+        valid_unique_ids.add(f"{eid}_updates_available_{ep}")
+        valid_unique_ids.add(f"{eid}_agent_summary_{ep}")
+        # Scheduler sensors are primary-only
+        if ep == "":
+            valid_unique_ids.add(f"{eid}_scheduler_status_{ep}")
+            valid_unique_ids.add(f"{eid}_last_update_{ep}")
+            valid_unique_ids.add(f"{eid}_next_auto_update_{ep}")
+            valid_unique_ids.add(f"{eid}_next_image_check_{ep}")
+
+    for stack in stacks:
+        ep = stack.get("endpoint", "")
+        sname = stack["name"]
+        valid_unique_ids.add(f"{eid}_stack_{ep}_{sname}")
+        for svc_name in (stack.get("services") or {}):
+            valid_unique_ids.add(f"{eid}_container_{ep}_{sname}_{svc_name}")
+            valid_unique_ids.add(f"{eid}_container_update_{ep}_{sname}_{svc_name}")
+
+    # Also include button/switch unique_ids
+    for stack in stacks:
+        ep = stack.get("endpoint", "")
+        sname = stack["name"]
+        valid_unique_ids.add(f"{eid}_update_{ep}_{sname}")
+        valid_unique_ids.add(f"{eid}_check_updates_{ep}_{sname}")
+        valid_unique_ids.add(f"{eid}_auto_update_{ep}_{sname}")
+
+    # Remove stale entities on active devices
+    for ent in er.async_entries_for_config_entry(entity_reg, entry.entry_id):
+        if ent.unique_id not in valid_unique_ids:
+            _LOGGER.info("Removing stale Dockge entity: %s (%s)", ent.entity_id, ent.unique_id)
+            entity_reg.async_remove(ent.entity_id)
+
+    # Remove stale devices
     for device in dr.async_entries_for_config_entry(device_reg, entry.entry_id):
-        # Check if any of the device's identifiers are still active
         if device.identifiers.intersection(active_ids):
             continue
-
-        # Remove all entities for this device first
-        for entity in er.async_entries_for_device(entity_reg, device.id, include_disabled_entities=True):
-            if entity.config_entry_id == entry.entry_id:
-                entity_reg.async_remove(entity.entity_id)
-
-        # Remove the device
         _LOGGER.info("Removing stale Dockge device: %s", device.name)
         device_reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)

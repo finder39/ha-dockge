@@ -37,6 +37,9 @@ async def async_setup_entry(
         entities.append(
             DockgeUpdatesAvailableSensor(coordinator, entry, endpoint, name, multi_agent),
         )
+        entities.append(
+            DockgeAgentSummarySensor(coordinator, entry, endpoint, name, multi_agent),
+        )
         # Scheduler, history, and next-run sensors are server-wide (primary only)
         if endpoint == "":
             entities.extend([
@@ -109,6 +112,7 @@ class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._stack_name = stack_name
         self._endpoint = endpoint
+        self._agent_name = agent_name
         self._service_name = service_name
         self._attr_unique_id = f"{entry.entry_id}_container_{endpoint}_{stack_name}_{service_name}"
         self._attr_name = service_name
@@ -160,6 +164,8 @@ class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
             "image_tag": image_tag,
             "status": svc.get("status"),
             "health": svc.get("health"),
+            "stack_name": self._stack_name,
+            "agent_name": self._agent_name,
         }
 
 
@@ -326,3 +332,53 @@ class DockgeNextImageCheckSensor(CoordinatorEntity, SensorEntity):
             return datetime.fromisoformat(iso.replace("Z", "+00:00"))
         except (ValueError, TypeError):
             return None
+
+
+class DockgeAgentSummarySensor(CoordinatorEntity, SensorEntity):
+    """Sensor summarising all stacks and containers on an agent."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:server"
+
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
+    ) -> None:
+        super().__init__(coordinator)
+        self._endpoint = endpoint
+        self._agent_name = agent_name
+        self._attr_unique_id = f"{entry.entry_id}_agent_summary_{endpoint}"
+        self._attr_name = "Server Summary"
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent)
+
+    def _agent_stacks(self) -> list[dict]:
+        stacks = self.coordinator.data.get("stacks") or []
+        return [s for s in stacks if s.get("endpoint", "") == self._endpoint]
+
+    @property
+    def native_value(self) -> int:
+        total = 0
+        for stack in self._agent_stacks():
+            for svc in (stack.get("services") or {}).values():
+                if svc.get("state") == "running":
+                    total += 1
+        return total
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        agent_stacks = self._agent_stacks()
+        stack_names = sorted(s["name"] for s in agent_stacks)
+        total_containers = 0
+        running_containers = 0
+        for stack in agent_stacks:
+            for svc in (stack.get("services") or {}).values():
+                total_containers += 1
+                if svc.get("state") == "running":
+                    running_containers += 1
+        return {
+            "agent_name": self._agent_name,
+            "stacks": stack_names,
+            "total_stacks": len(stack_names),
+            "total_containers": total_containers,
+            "running_containers": running_containers,
+        }

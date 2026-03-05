@@ -35,9 +35,13 @@ def stack_device_info(
     *, multi_agent: bool = False,
 ) -> DeviceInfo:
     """Return DeviceInfo for a stack device, child of its agent device."""
+    if multi_agent:
+        name = f"{stack_name} ({agent_name})"
+    else:
+        name = stack_name
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry_id}_{endpoint}_{stack_name}")},
-        name=stack_name,
+        name=name,
         manufacturer="Dockge",
         model="Docker Compose Stack",
         via_device=(DOMAIN, f"{entry_id}_{endpoint}"),
