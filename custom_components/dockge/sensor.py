@@ -170,6 +170,7 @@ class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
             "health": svc.get("health"),
             "stack_name": self._stack_name,
             "agent_name": self._agent_name,
+            "update_available": bool(svc.get("imageUpdateAvailable")),
         }
 
 
