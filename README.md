@@ -76,6 +76,11 @@ Or click the button above to add the repository directly.
 | Button | Check Updates | Check for new image updates |
 | Switch | Auto Update | Enable/disable auto-updates for this stack |
 
+## Community
+
+- [Home Assistant Community Forum thread](https://community.home-assistant.io/t/hacs-dockge-monitor-and-manage-docker-stacks-from-home-assistant/992901)
+- [GitHub Issues](https://github.com/finder39/ha-dockge/issues)
+
 ## Vibecoded
 
 This integration was built entirely through vibe coding with [Claude Code](https://claude.ai/claude-code).
