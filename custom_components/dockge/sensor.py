@@ -49,6 +49,10 @@ async def async_setup_entry(
                 DockgeNextImageCheckSensor(coordinator, entry, endpoint, name, multi_agent),
             ])
 
+    # Global summary sensor (aggregates across all agents)
+    if multi_agent:
+        entities.append(DockgeGlobalSummarySensor(coordinator, entry))
+
     # Per-container sensors (dynamically tracked)
     tracked_containers: set[str] = set()
 
@@ -381,4 +385,62 @@ class DockgeAgentSummarySensor(CoordinatorEntity, SensorEntity):
             "total_stacks": len(stack_names),
             "total_containers": total_containers,
             "running_containers": running_containers,
+        }
+
+
+class DockgeGlobalSummarySensor(CoordinatorEntity, SensorEntity):
+    """Sensor summarising all stacks and containers across all agents."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:server-network"
+
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_global_summary"
+        self._attr_name = "Global Summary"
+        self._attr_device_info = agent_device_info(
+            entry.entry_id, "", agent_display_name(
+                coordinator.data.get("agent_names", {}), "",
+            ), multi_agent=True,
+        )
+
+    @property
+    def native_value(self) -> int:
+        total = 0
+        for stack in self.coordinator.data.get("stacks") or []:
+            for svc in (stack.get("services") or {}).values():
+                if svc.get("state") == "running":
+                    total += 1
+        return total
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        stacks = self.coordinator.data.get("stacks") or []
+        agents = self.coordinator.data.get("agent_names") or {}
+        total_containers = 0
+        running_containers = 0
+        per_agent: dict[str, dict] = {}
+        for stack in stacks:
+            ep = stack.get("endpoint", "")
+            aname = agent_display_name(agents, ep)
+            if aname not in per_agent:
+                per_agent[aname] = {"stacks": [], "running": 0, "total": 0}
+            per_agent[aname]["stacks"].append(stack["name"])
+            for svc in (stack.get("services") or {}).values():
+                total_containers += 1
+                per_agent[aname]["total"] += 1
+                if svc.get("state") == "running":
+                    running_containers += 1
+                    per_agent[aname]["running"] += 1
+        return {
+            "total_stacks": len(stacks),
+            "total_containers": total_containers,
+            "running_containers": running_containers,
+            "agents": {name: {
+                "stacks": sorted(data["stacks"]),
+                "running_containers": data["running"],
+                "total_containers": data["total"],
+            } for name, data in per_agent.items()},
         }

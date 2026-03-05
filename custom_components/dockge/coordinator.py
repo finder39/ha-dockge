@@ -56,9 +56,9 @@ class DockgeCoordinator(DataUpdateCoordinator):
                     resp.raise_for_status()
                     agents_resp = await resp.json()
 
-                # Fetch all stacks (from all agents)
+                # Fetch all stacks (from all agents) — longer timeout since it proxies to agents
                 async with session.get(
-                    f"{self.url}/api/stacks", headers=self._headers(), timeout=aiohttp.ClientTimeout(total=10)
+                    f"{self.url}/api/stacks", headers=self._headers(), timeout=aiohttp.ClientTimeout(total=30)
                 ) as resp:
                     resp.raise_for_status()
                     stacks_resp = await resp.json()
@@ -90,6 +90,22 @@ class DockgeCoordinator(DataUpdateCoordinator):
         # Build agent name map for entity naming
         agent_names = self._agent_name_map(agents)
         multi_agent = len(agents) > 1
+
+        # Preserve stacks from agents that are known but returned no stacks
+        # (e.g. agent temporarily disconnected from Dockge primary)
+        if self.data and multi_agent:
+            known_endpoints = {a.get("endpoint", "") for a in agents}
+            returned_endpoints = {s.get("endpoint", "") for s in stacks}
+            missing_endpoints = known_endpoints - returned_endpoints
+            if missing_endpoints:
+                prev_stacks = self.data.get("stacks") or []
+                for prev in prev_stacks:
+                    if prev.get("endpoint", "") in missing_endpoints:
+                        stacks.append(prev)
+                _LOGGER.debug(
+                    "Preserved stacks from temporarily missing agents: %s",
+                    missing_endpoints,
+                )
 
         return {
             "agents": agents,

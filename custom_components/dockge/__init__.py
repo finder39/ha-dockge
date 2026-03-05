@@ -132,6 +132,9 @@ def _cleanup_stale_devices(
     eid = entry.entry_id
     valid_unique_ids: set[str] = set()
 
+    if len(agents) > 1:
+        valid_unique_ids.add(f"{eid}_global_summary")
+
     for agent in agents:
         ep = agent.get("endpoint", "")
         valid_unique_ids.add(f"{eid}_updates_available_{ep}")
