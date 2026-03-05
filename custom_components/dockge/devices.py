@@ -32,6 +32,7 @@ def agent_device_info(
 
 def stack_device_info(
     entry_id: str, endpoint: str, stack_name: str, agent_name: str,
+    *, multi_agent: bool = False,
 ) -> DeviceInfo:
     """Return DeviceInfo for a stack device, child of its agent device."""
     return DeviceInfo(
