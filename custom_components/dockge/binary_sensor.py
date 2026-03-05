@@ -28,6 +28,7 @@ async def async_setup_entry(
     def _async_add_new_entities() -> None:
         stacks = coordinator.data.get("stacks") or []
         agent_names = coordinator.data.get("agent_names", {})
+        is_multi = coordinator.data.get("multi_agent", False)
         new_entities: list[BinarySensorEntity] = []
         for stack in stacks:
             endpoint = stack.get("endpoint", "")
@@ -40,6 +41,7 @@ async def async_setup_entry(
                 new_entities.append(
                     DockgeStackUpdateAvailableBinarySensor(
                         coordinator, entry, stack, aname,
+                        multi_agent=is_multi,
                     )
                 )
 
@@ -53,6 +55,7 @@ async def async_setup_entry(
                         DockgeContainerUpdateAvailableBinarySensor(
                             coordinator, entry, stack["name"],
                             endpoint, aname, svc_name,
+                            multi_agent=is_multi,
                         )
                     )
 
@@ -71,7 +74,7 @@ class DockgeStackUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensorEnti
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        stack: dict, agent_name: str,
+        stack: dict, agent_name: str, *, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._stack_name = stack["name"]
@@ -80,6 +83,7 @@ class DockgeStackUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensorEnti
         self._attr_name = "Update Available"
         self._attr_device_info = stack_device_info(
             entry.entry_id, self._endpoint, self._stack_name, agent_name,
+            multi_agent=multi_agent,
         )
 
     def _get_stack(self) -> dict | None:
@@ -117,6 +121,7 @@ class DockgeContainerUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensor
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
         stack_name: str, endpoint: str, agent_name: str, service_name: str,
+        *, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._stack_name = stack_name
@@ -126,6 +131,7 @@ class DockgeContainerUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensor
         self._attr_name = f"{service_name} Update Available"
         self._attr_device_info = stack_device_info(
             entry.entry_id, endpoint, stack_name, agent_name,
+            multi_agent=multi_agent,
         )
 
     def _get_service(self) -> dict | None:

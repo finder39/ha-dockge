@@ -31,8 +31,9 @@ async def async_setup_entry(
                 tracked.add(key)
                 endpoint = stack.get("endpoint", "")
                 name = agent_display_name(agent_names, endpoint)
+                is_multi = coordinator.data.get("multi_agent", False)
                 new_entities.append(
-                    DockgeAutoUpdateSwitch(coordinator, entry, stack, name)
+                    DockgeAutoUpdateSwitch(coordinator, entry, stack, name, multi_agent=is_multi)
                 )
         if new_entities:
             async_add_entities(new_entities)
@@ -49,7 +50,7 @@ class DockgeAutoUpdateSwitch(CoordinatorEntity, SwitchEntity):
 
     def __init__(
         self, coordinator: DockgeCoordinator, entry: ConfigEntry,
-        stack: dict, agent_name: str,
+        stack: dict, agent_name: str, *, multi_agent: bool = False,
     ) -> None:
         super().__init__(coordinator)
         self._stack_name = stack["name"]
@@ -58,6 +59,7 @@ class DockgeAutoUpdateSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_name = "Auto Update"
         self._attr_device_info = stack_device_info(
             entry.entry_id, self._endpoint, self._stack_name, agent_name,
+            multi_agent=multi_agent,
         )
 
     def _get_stack(self) -> dict | None:
