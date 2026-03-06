@@ -49,7 +49,7 @@ Or click the button above to add the repository directly.
 2. Search for **Dockge**
 3. Enter your Dockge URL (e.g., `http://192.168.1.100:5001`)
 4. Enter your API key
-5. Optionally adjust the scan interval (default: 30 seconds)
+5. Optionally adjust the scan interval (default: 300 seconds)
 
 ## Entities
 
@@ -58,12 +58,12 @@ Or click the button above to add the repository directly.
 | Type | Entity | Description |
 |------|--------|-------------|
 | Sensor | Image Updates Available | Count of stacks with available updates |
-| Sensor | Auto-Update Scheduler | Scheduler status with cron details |
-| Sensor | Last Stack Update | Timestamp of most recent update |
-| Sensor | Next Auto Update | Next scheduled auto-update time |
-| Sensor | Next Image Check | Next scheduled image check time |
-| Button | Update All | Update all stacks across all agents |
-| Button | Trigger Scheduled Run | Manually trigger a scheduled update run |
+| Sensor | Server Summary | Running container count with per-stack breakdown in attributes |
+| Sensor | Auto-Update Scheduler | Scheduler status with cron details (primary agent only) |
+| Sensor | Last Stack Update | Timestamp of most recent update (primary agent only) |
+| Sensor | Next Auto Update | Next scheduled auto-update time (primary agent only) |
+| Sensor | Next Image Check | Next scheduled image check time (primary agent only) |
+| Sensor | Global Summary | Aggregate across all agents (multi-agent only, on primary device) |
 
 ### Stack-level (per stack device)
 
@@ -72,9 +72,24 @@ Or click the button above to add the repository directly.
 | Binary Sensor | Update Available | On when stack has image updates |
 | Binary Sensor | {container} Update Available | On when a specific container has updates |
 | Sensor | {container} | Container state with image and health attributes |
-| Button | Update | Update this stack |
+| Button | Update | Pull latest images and recreate the stack |
 | Button | Check Updates | Check for new image updates |
 | Switch | Auto Update | Enable/disable auto-updates for this stack |
+
+## Services
+
+All services are available under the `dockge` domain (e.g., `dockge.start_stack`). The optional `agent` field accepts an agent display name (e.g., "Gastly") for multi-agent setups; leave empty for the primary server.
+
+| Service | Fields | Description |
+|---------|--------|-------------|
+| `start_stack` | `stack_name`, `agent`? | Start a Docker Compose stack |
+| `stop_stack` | `stack_name`, `agent`? | Stop a Docker Compose stack |
+| `restart_stack` | `stack_name`, `agent`? | Restart a Docker Compose stack |
+| `update_stack` | `stack_name`, `agent`? | Pull latest images and recreate a stack |
+| `check_updates` | `stack_name`, `agent`? | Check for image updates on a stack |
+| `update_all` | `agent`? | Update all stacks (optionally on a specific agent) |
+| `trigger_auto_updates` | _(none)_ | Trigger auto-updates on all stacks with auto-update enabled |
+| `system_prune` | `agent`? | Run Docker system prune to clean up unused images, containers, and networks |
 
 ## Community
 
