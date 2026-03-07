@@ -23,6 +23,7 @@ class DockgeCoordinator(DataUpdateCoordinator):
         """Initialize the coordinator."""
         self.url = entry.data[CONF_URL].rstrip("/")
         self.api_key = entry.data[CONF_API_KEY]
+        self._busy_stacks: set[str] = set()
         scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
         super().__init__(
@@ -134,3 +135,20 @@ class DockgeCoordinator(DataUpdateCoordinator):
                         return None
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Dockge API call failed: {err}") from err
+
+    def _busy_key(self, endpoint: str, stack_name: str) -> str:
+        """Build a unique key for a busy stack."""
+        return f"{endpoint}_{stack_name}"
+
+    def is_stack_busy(self, endpoint: str, stack_name: str) -> bool:
+        """Check if a stack is currently processing an operation."""
+        return self._busy_key(endpoint, stack_name) in self._busy_stacks
+
+    def mark_busy(self, endpoint: str, stack_name: str) -> None:
+        """Mark a stack as busy and notify entities immediately."""
+        self._busy_stacks.add(self._busy_key(endpoint, stack_name))
+        self.async_set_updated_data(self.data)
+
+    def mark_done(self, endpoint: str, stack_name: str) -> None:
+        """Mark a stack as no longer busy."""
+        self._busy_stacks.discard(self._busy_key(endpoint, stack_name))
