@@ -51,8 +51,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         stack_name = call.data["stack_name"]
         endpoint = _resolve_endpoint(call.data.get("agent", ""))
         endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
-        await coordinator.api_call("POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}")
-        await coordinator.async_request_refresh()
+        coordinator.mark_busy(endpoint, stack_name)
+        try:
+            await coordinator.api_call("POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}")
+        finally:
+            coordinator.mark_done(endpoint, stack_name)
+            await coordinator.async_request_refresh()
 
     def _make_stack_handler(action_path: str):
         async def handler(call) -> None:
@@ -75,8 +79,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _handle_update_all(call) -> None:
         endpoint = _resolve_endpoint(call.data.get("agent", ""))
         endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
-        await coordinator.api_call("POST", f"/api/update-all{endpoint_param}")
-        await coordinator.async_request_refresh()
+        stacks = coordinator.data.get("stacks") or []
+        busy_keys = []
+        for stack in stacks:
+            ep = stack.get("endpoint", "")
+            if endpoint == "" or ep == endpoint:
+                coordinator.mark_busy(ep, stack["name"])
+                busy_keys.append((ep, stack["name"]))
+        try:
+            await coordinator.api_call("POST", f"/api/update-all{endpoint_param}")
+        finally:
+            for ep, name in busy_keys:
+                coordinator.mark_done(ep, name)
+            await coordinator.async_request_refresh()
 
     hass.services.async_register(
         DOMAIN, "update_all", _handle_update_all,
@@ -95,8 +110,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _handle_system_prune(call) -> None:
         endpoint = _resolve_endpoint(call.data.get("agent", ""))
         endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
-        await coordinator.api_call("POST", f"/api/system/prune{endpoint_param}")
-        await coordinator.async_request_refresh()
+        stacks = coordinator.data.get("stacks") or []
+        busy_keys = []
+        for stack in stacks:
+            ep = stack.get("endpoint", "")
+            if endpoint == "" or ep == endpoint:
+                coordinator.mark_busy(ep, stack["name"])
+                busy_keys.append((ep, stack["name"]))
+        try:
+            await coordinator.api_call("POST", f"/api/system/prune{endpoint_param}")
+        finally:
+            for ep, name in busy_keys:
+                coordinator.mark_done(ep, name)
+            await coordinator.async_request_refresh()
 
     hass.services.async_register(
         DOMAIN, "system_prune", _handle_system_prune,
