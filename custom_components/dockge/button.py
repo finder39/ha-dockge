@@ -88,10 +88,14 @@ class DockgeUpdateStackButton(CoordinatorEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
-        await self.coordinator.api_call(
-            "POST", f"/api/stacks/{self._stack_name}/update{endpoint_param}"
-        )
-        await self.coordinator.async_request_refresh()
+        self.coordinator.mark_busy(self._endpoint, self._stack_name)
+        try:
+            await self.coordinator.api_call(
+                "POST", f"/api/stacks/{self._stack_name}/update{endpoint_param}"
+            )
+        finally:
+            self.coordinator.mark_done(self._endpoint, self._stack_name)
+            await self.coordinator.async_request_refresh()
 
 
 class DockgeCheckUpdatesButton(CoordinatorEntity, ButtonEntity):
@@ -116,7 +120,11 @@ class DockgeCheckUpdatesButton(CoordinatorEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
-        await self.coordinator.api_call(
-            "POST", f"/api/stacks/{self._stack_name}/check-updates{endpoint_param}"
-        )
-        await self.coordinator.async_request_refresh()
+        self.coordinator.mark_busy(self._endpoint, self._stack_name)
+        try:
+            await self.coordinator.api_call(
+                "POST", f"/api/stacks/{self._stack_name}/check-updates{endpoint_param}"
+            )
+        finally:
+            self.coordinator.mark_done(self._endpoint, self._stack_name)
+            await self.coordinator.async_request_refresh()
