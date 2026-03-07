@@ -89,6 +89,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         schema=vol.Schema({}),
     )
 
+    async def _handle_system_prune(call) -> None:
+        endpoint = _resolve_endpoint(call.data.get("agent", ""))
+        endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
+        await coordinator.api_call("POST", f"/api/system/prune{endpoint_param}")
+
+    hass.services.async_register(
+        DOMAIN, "system_prune", _handle_system_prune,
+        schema=vol.Schema({vol.Optional("agent", default=""): cv.string}),
+    )
+
     # Clean up devices for stacks that no longer exist
     _cleanup_stale_devices(hass, entry, coordinator)
     entry.async_on_unload(
@@ -100,7 +110,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    for svc in ["start_stack", "stop_stack", "restart_stack", "update_stack", "check_updates", "update_all", "trigger_auto_updates"]:
+    for svc in ["start_stack", "stop_stack", "restart_stack", "update_stack", "check_updates", "update_all", "trigger_auto_updates", "system_prune"]:
         hass.services.async_remove(DOMAIN, svc)
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -118,6 +128,21 @@ def _cleanup_stale_devices(
 
     agents = coordinator.data.get("agents") or []
     stacks = coordinator.data.get("stacks") or []
+
+    # Determine which agent endpoints returned stacks vs are known but empty
+    # (empty agents are likely temporarily disconnected — don't clean up their devices)
+    endpoints_with_stacks = {s.get("endpoint", "") for s in stacks}
+    empty_agent_endpoints = {
+        a.get("endpoint", "") for a in agents
+    } - endpoints_with_stacks
+
+    if empty_agent_endpoints:
+        agent_names = coordinator.data.get("agent_names", {})
+        empty_names = [agent_names.get(ep, ep) for ep in empty_agent_endpoints]
+        _LOGGER.debug(
+            "Skipping cleanup for agents with no stacks (likely disconnected): %s",
+            empty_names,
+        )
 
     # Build set of active device identifiers
     active_ids: set[tuple[str, str]] = set()
@@ -162,15 +187,41 @@ def _cleanup_stale_devices(
         valid_unique_ids.add(f"{eid}_check_updates_{ep}_{sname}")
         valid_unique_ids.add(f"{eid}_auto_update_{ep}_{sname}")
 
-    # Remove stale entities on active devices
-    for ent in er.async_entries_for_config_entry(entity_reg, entry.entry_id):
-        if ent.unique_id not in valid_unique_ids:
-            _LOGGER.info("Removing stale Dockge entity: %s (%s)", ent.entity_id, ent.unique_id)
-            entity_reg.async_remove(ent.entity_id)
+    # Build set of device identifiers belonging to disconnected agents
+    # These are agents in /api/agents but returning no stacks — keep all their devices/entities
+    protected_device_ids: set[tuple[str, str]] = set()
+    for ep in empty_agent_endpoints:
+        if not ep:
+            continue
+        # Protect the agent device itself
+        protected_device_ids.add((DOMAIN, f"{eid}_{ep}"))
+        # Protect any stack devices under this agent (from prior data)
+        for device in dr.async_entries_for_config_entry(device_reg, entry.entry_id):
+            for ident in device.identifiers:
+                if len(ident) > 1 and ident[0] == DOMAIN and ident[1].startswith(f"{eid}_{ep}_"):
+                    protected_device_ids.add(ident)
 
-    # Remove stale devices
+    # Build set of entity unique_ids belonging to protected devices
+    protected_entity_prefixes = tuple(f"{eid}_" + suffix for ep in empty_agent_endpoints if ep for suffix in [
+        f"container_{ep}_", f"container_update_{ep}_", f"stack_{ep}_",
+        f"update_{ep}_", f"check_updates_{ep}_", f"auto_update_{ep}_",
+    ])
+
+    # Remove stale entities — but skip entities belonging to disconnected agents
+    for ent in er.async_entries_for_config_entry(entity_reg, entry.entry_id):
+        if ent.unique_id in valid_unique_ids:
+            continue
+        if protected_entity_prefixes and ent.unique_id.startswith(protected_entity_prefixes):
+            continue
+        _LOGGER.info("Removing stale Dockge entity: %s (%s)", ent.entity_id, ent.unique_id)
+        entity_reg.async_remove(ent.entity_id)
+
+    # Remove stale devices — but skip devices belonging to disconnected agents
     for device in dr.async_entries_for_config_entry(device_reg, entry.entry_id):
         if device.identifiers.intersection(active_ids):
+            continue
+        if device.identifiers.intersection(protected_device_ids):
+            _LOGGER.debug("Keeping device for disconnected agent: %s", device.name)
             continue
         _LOGGER.info("Removing stale Dockge device: %s", device.name)
         device_reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
