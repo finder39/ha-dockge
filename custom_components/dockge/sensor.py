@@ -40,6 +40,9 @@ async def async_setup_entry(
         entities.append(
             DockgeAgentSummarySensor(coordinator, entry, endpoint, name, multi_agent),
         )
+        entities.append(
+            DockgeVersionSensor(coordinator, entry, endpoint, name, multi_agent, version=agent.get("version")),
+        )
         # Scheduler, history, and next-run sensors are server-wide (primary only)
         if endpoint == "":
             entities.extend([
@@ -387,6 +390,32 @@ class DockgeAgentSummarySensor(CoordinatorEntity, SensorEntity):
             "total_containers": total_containers,
             "running_containers": running_containers,
         }
+
+
+class DockgeVersionSensor(CoordinatorEntity, SensorEntity):
+    """Sensor showing the Dockge version for an agent."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:tag"
+
+    def __init__(
+        self, coordinator: DockgeCoordinator, entry: ConfigEntry,
+        endpoint: str, agent_name: str, multi_agent: bool = False,
+        version: str | None = None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._endpoint = endpoint
+        self._attr_unique_id = f"{entry.entry_id}_version_{endpoint}"
+        self._attr_name = "Version"
+        self._attr_device_info = agent_device_info(entry.entry_id, endpoint, agent_name, multi_agent=multi_agent, version=version)
+
+    @property
+    def native_value(self) -> str | None:
+        agents = self.coordinator.data.get("agents") or []
+        for agent in agents:
+            if agent.get("endpoint", "") == self._endpoint:
+                return agent.get("version")
+        return None
 
 
 class DockgeGlobalSummarySensor(CoordinatorEntity, SensorEntity):

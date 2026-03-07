@@ -103,11 +103,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         schema=vol.Schema({vol.Optional("agent", default=""): cv.string}),
     )
 
-    # Clean up devices for stacks that no longer exist
-    _cleanup_stale_devices(hass, entry, coordinator)
-    entry.async_on_unload(
-        coordinator.async_add_listener(lambda: _cleanup_stale_devices(hass, entry, coordinator))
-    )
+    # NOTE: We intentionally do NOT auto-delete stale devices/entities.
+    # Agents and stacks that are temporarily offline would get removed and
+    # reappear on next poll, which is jarring. Instead, users can manually
+    # delete stale devices from the HA device page.
 
     return True
 
@@ -168,6 +167,7 @@ def _cleanup_stale_devices(
         ep = agent.get("endpoint", "")
         valid_unique_ids.add(f"{eid}_updates_available_{ep}")
         valid_unique_ids.add(f"{eid}_agent_summary_{ep}")
+        valid_unique_ids.add(f"{eid}_version_{ep}")
         # Scheduler sensors are primary-only
         if ep == "":
             valid_unique_ids.add(f"{eid}_scheduler_status_{ep}")

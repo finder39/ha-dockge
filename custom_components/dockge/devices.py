@@ -15,6 +15,7 @@ def agent_display_name(agent_names: dict[str, str], endpoint: str) -> str:
 
 def agent_device_info(
     entry_id: str, endpoint: str, agent_name: str, *, multi_agent: bool = False,
+    version: str | None = None,
 ) -> DeviceInfo:
     """Return DeviceInfo for an agent (server-level) device."""
     if multi_agent:
@@ -27,6 +28,7 @@ def agent_device_info(
         manufacturer="Dockge",
         model="Docker Compose Manager",
         entry_type=DeviceEntryType.SERVICE,
+        sw_version=version,
     )
 
 
