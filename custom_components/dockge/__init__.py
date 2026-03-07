@@ -110,19 +110,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _handle_system_prune(call) -> None:
         endpoint = _resolve_endpoint(call.data.get("agent", ""))
         endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
-        stacks = coordinator.data.get("stacks") or []
-        busy_keys = []
-        for stack in stacks:
-            ep = stack.get("endpoint", "")
-            if endpoint == "" or ep == endpoint:
-                coordinator.mark_busy(ep, stack["name"])
-                busy_keys.append((ep, stack["name"]))
-        try:
-            await coordinator.api_call("POST", f"/api/system/prune{endpoint_param}")
-        finally:
-            for ep, name in busy_keys:
-                coordinator.mark_done(ep, name)
-            await coordinator.async_request_refresh()
+        await coordinator.api_call("POST", f"/api/system/prune{endpoint_param}")
+        await coordinator.async_request_refresh()
 
     hass.services.async_register(
         DOMAIN, "system_prune", _handle_system_prune,

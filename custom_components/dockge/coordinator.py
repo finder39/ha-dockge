@@ -150,5 +150,6 @@ class DockgeCoordinator(DataUpdateCoordinator):
         self.async_set_updated_data(self.data)
 
     def mark_done(self, endpoint: str, stack_name: str) -> None:
-        """Mark a stack as no longer busy."""
+        """Mark a stack as no longer busy and notify entities immediately."""
         self._busy_stacks.discard(self._busy_key(endpoint, stack_name))
+        self.async_set_updated_data(self.data)
