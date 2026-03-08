@@ -23,6 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         coordinator = DockgeCoordinator(hass, entry)
         await coordinator.async_config_entry_first_refresh()
+        await coordinator.start_sse()
     except Exception:
         _LOGGER.exception("Failed to set up Dockge coordinator")
         raise
@@ -48,33 +49,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         vol.Optional("agent", default=""): cv.string,
     })
 
-    async def _handle_stack_action(call, action_path: str) -> None:
+    async def _handle_stack_action(call, action_path: str, *, retry: bool = False) -> None:
         stack_name = call.data["stack_name"]
         endpoint = _resolve_endpoint(call.data.get("agent", ""))
         endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
         coordinator.mark_busy(endpoint, stack_name)
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
-            await coordinator.api_call("POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}")
+            await coordinator.api_call(
+                "POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}",
+                retry=retry,
+            )
         finally:
             coordinator.mark_done(endpoint, stack_name)
             await coordinator.async_request_refresh()
 
-    def _make_stack_handler(action_path: str):
+    def _make_stack_handler(action_path: str, *, retry: bool = False):
         async def handler(call) -> None:
-            await _handle_stack_action(call, action_path)
+            await _handle_stack_action(call, action_path, retry=retry)
         return handler
 
-    for service_name, path in [
-        ("start_stack", "start"),
-        ("stop_stack", "stop"),
-        ("restart_stack", "restart"),
-        ("update_stack", "update"),
-        ("check_updates", "check-updates"),
+    for service_name, path, retry in [
+        ("start_stack", "start", False),
+        ("stop_stack", "stop", False),
+        ("restart_stack", "restart", False),
+        ("update_stack", "update", True),
+        ("check_updates", "check-updates", False),
     ]:
         hass.services.async_register(
             DOMAIN, service_name,
-            _make_stack_handler(path),
+            _make_stack_handler(path, retry=retry),
             schema=STACK_ACTION_SCHEMA,
         )
 
@@ -90,7 +94,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 busy_keys.append((ep, stack["name"]))
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
-            await coordinator.api_call("POST", f"/api/update-all{endpoint_param}")
+            await coordinator.api_call("POST", f"/api/update-all{endpoint_param}", retry=True)
         finally:
             for ep, name in busy_keys:
                 coordinator.mark_done(ep, name)
@@ -131,6 +135,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+    await coordinator.stop_sse()
+
     for svc in ["start_stack", "stop_stack", "restart_stack", "update_stack", "check_updates", "update_all", "trigger_auto_updates", "system_prune"]:
         hass.services.async_remove(DOMAIN, svc)
 
