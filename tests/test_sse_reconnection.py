@@ -30,7 +30,6 @@ class TestSSEReconnection:
         mock_task = AsyncMock()
         mock_task.cancel = MagicMock()
         coordinator._sse_task = mock_task
-        coordinator._sse_session = AsyncMock()
 
         await coordinator.stop_sse()
         mock_task.cancel.assert_called_once()

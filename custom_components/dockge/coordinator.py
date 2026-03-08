@@ -27,7 +27,6 @@ class DockgeCoordinator(DataUpdateCoordinator):
         self.api_key = entry.data[CONF_API_KEY]
         self._busy_stacks: set[str] = set()
         self._sse_task: asyncio.Task | None = None
-        self._sse_session: aiohttp.ClientSession | None = None
         self._sse_stop_event = asyncio.Event()
         self._sse_watchdog_handle: asyncio.TimerHandle | None = None
         scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
@@ -223,9 +222,6 @@ class DockgeCoordinator(DataUpdateCoordinator):
             except (asyncio.CancelledError, Exception):
                 pass
             self._sse_task = None
-        if self._sse_session is not None:
-            await self._sse_session.close()
-            self._sse_session = None
         self._cancel_watchdog()
 
     async def _sse_listen_loop(self) -> None:
@@ -246,41 +242,60 @@ class DockgeCoordinator(DataUpdateCoordinator):
 
     async def _sse_connect(self) -> None:
         """Open SSE connection and process events until disconnected."""
-        if self._sse_session is None:
-            self._sse_session = aiohttp.ClientSession()
-
         url = f"{self.url}/api/events"
         headers = {"X-API-Key": self.api_key}
 
         _LOGGER.debug("Connecting to SSE at %s", url)
-        async with self._sse_session.get(
-            url, headers=headers, timeout=aiohttp.ClientTimeout(total=None)
-        ) as resp:
-            if resp.status != 200:
-                _LOGGER.warning("SSE connection rejected: HTTP %s", resp.status)
-                return
-
-            _LOGGER.info("SSE connected to %s", url)
-            self._reset_watchdog()
-
-            event_name = ""
-            async for line_bytes in resp.content:
-                if self._sse_stop_event.is_set():
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=None)
+            ) as resp:
+                if resp.status == 404:
+                    _LOGGER.info(
+                        "SSE endpoint not available (Dockge may not support SSE yet), "
+                        "will retry in 5 minutes"
+                    )
+                    # Wait 5 minutes before retrying (via the listen loop)
+                    try:
+                        await asyncio.wait_for(self._sse_stop_event.wait(), timeout=300.0)
+                        return
+                    except asyncio.TimeoutError:
+                        return
+                if resp.status != 200:
+                    _LOGGER.warning("SSE connection rejected: HTTP %s", resp.status)
                     return
 
-                line = line_bytes.decode("utf-8").rstrip("\n\r")
+                _LOGGER.info("SSE connected to %s", url)
+                self._reset_watchdog()
 
-                if line.startswith("event: "):
-                    event_name = line[7:]
-                elif line.startswith("data: "):
-                    data_str = line[6:]
-                    try:
-                        data = json.loads(data_str)
-                    except (json.JSONDecodeError, ValueError):
-                        _LOGGER.warning("SSE malformed data: %s", data_str)
-                        continue
-                    self._handle_sse_event(event_name, data)
-                    event_name = ""
+                event_name = ""
+                data_lines: list[str] = []
+                while True:
+                    line_bytes = await resp.content.readline()
+                    if not line_bytes:
+                        break  # Connection closed
+
+                    if self._sse_stop_event.is_set():
+                        return
+
+                    line = line_bytes.decode("utf-8").rstrip("\n\r")
+
+                    if line.startswith("event: "):
+                        event_name = line[7:]
+                    elif line.startswith("data: "):
+                        data_lines.append(line[6:])
+                    elif line == "":
+                        # Blank line = end of event block
+                        if data_lines:
+                            raw = "\n".join(data_lines)
+                            try:
+                                data = json.loads(raw)
+                            except (json.JSONDecodeError, ValueError):
+                                _LOGGER.warning("SSE malformed data: %s", raw)
+                            else:
+                                self._handle_sse_event(event_name, data)
+                        event_name = ""
+                        data_lines = []
 
         _LOGGER.warning("SSE connection closed by server")
 
@@ -298,6 +313,9 @@ class DockgeCoordinator(DataUpdateCoordinator):
         if event == "operation_started":
             stack = data.get("stack", "")
             endpoint = data.get("endpoint", "")
+            if not stack:
+                _LOGGER.debug("SSE operation_started with empty stack name, ignoring")
+                return
             _LOGGER.debug("SSE operation_started: %s on %s", stack, endpoint)
             self.mark_busy(endpoint, stack)
             return
@@ -305,6 +323,9 @@ class DockgeCoordinator(DataUpdateCoordinator):
         if event == "operation_completed":
             stack = data.get("stack", "")
             endpoint = data.get("endpoint", "")
+            if not stack:
+                _LOGGER.debug("SSE operation_completed with empty stack name, ignoring")
+                return
             success = data.get("success", False)
             _LOGGER.debug(
                 "SSE operation_completed: %s on %s (success=%s)", stack, endpoint, success

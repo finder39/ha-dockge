@@ -58,7 +58,6 @@ def coordinator(mock_hass):
         coord.api_key = "test-api-key"
         coord._busy_stacks = set()
         coord._sse_task = None
-        coord._sse_session = None
         coord._sse_stop_event = asyncio.Event()
         coord._sse_watchdog_handle = None
         coord.data = {

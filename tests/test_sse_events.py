@@ -68,8 +68,9 @@ class TestSSEEventHandling:
         coordinator._handle_sse_event("unknown_event_type", {"foo": "bar"})
 
     def test_malformed_event_missing_fields(self, coordinator):
+        """Empty stack name should be ignored, not marked busy."""
         coordinator._handle_sse_event("operation_started", {})
-        assert coordinator.is_stack_busy("", "")
+        assert not coordinator.is_stack_busy("", "")
 
     def test_mark_done_idempotent(self, coordinator):
         coordinator._handle_sse_event("operation_completed", {
