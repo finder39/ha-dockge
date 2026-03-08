@@ -146,10 +146,15 @@ class DockgeCoordinator(DataUpdateCoordinator):
 
     def mark_busy(self, endpoint: str, stack_name: str) -> None:
         """Mark a stack as busy and notify entities immediately."""
-        self._busy_stacks.add(self._busy_key(endpoint, stack_name))
-        self.async_set_updated_data(self.data)
+        key = self._busy_key(endpoint, stack_name)
+        self._busy_stacks.add(key)
+        _LOGGER.debug("Stack marked BUSY: %s (busy set: %s)", key, self._busy_stacks)
+        # Pass a shallow copy so HA detects the data as "changed" and pushes to frontend
+        self.async_set_updated_data({**self.data})
 
     def mark_done(self, endpoint: str, stack_name: str) -> None:
         """Mark a stack as no longer busy and notify entities immediately."""
-        self._busy_stacks.discard(self._busy_key(endpoint, stack_name))
-        self.async_set_updated_data(self.data)
+        key = self._busy_key(endpoint, stack_name)
+        self._busy_stacks.discard(key)
+        _LOGGER.debug("Stack marked DONE: %s (busy set: %s)", key, self._busy_stacks)
+        self.async_set_updated_data({**self.data})

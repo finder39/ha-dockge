@@ -1,5 +1,6 @@
 """The Dockge integration."""
 
+import asyncio
 import logging
 
 import voluptuous as vol
@@ -52,6 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         endpoint = _resolve_endpoint(call.data.get("agent", ""))
         endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
         coordinator.mark_busy(endpoint, stack_name)
+        await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await coordinator.api_call("POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}")
         finally:
@@ -86,6 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if endpoint == "" or ep == endpoint:
                 coordinator.mark_busy(ep, stack["name"])
                 busy_keys.append((ep, stack["name"]))
+        await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await coordinator.api_call("POST", f"/api/update-all{endpoint_param}")
         finally:

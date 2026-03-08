@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -89,6 +91,7 @@ class DockgeUpdateStackButton(CoordinatorEntity, ButtonEntity):
     async def async_press(self) -> None:
         endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
         self.coordinator.mark_busy(self._endpoint, self._stack_name)
+        await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await self.coordinator.api_call(
                 "POST", f"/api/stacks/{self._stack_name}/update{endpoint_param}"
@@ -121,6 +124,7 @@ class DockgeCheckUpdatesButton(CoordinatorEntity, ButtonEntity):
     async def async_press(self) -> None:
         endpoint_param = f"?endpoint={self._endpoint}" if self._endpoint else ""
         self.coordinator.mark_busy(self._endpoint, self._stack_name)
+        await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await self.coordinator.api_call(
                 "POST", f"/api/stacks/{self._stack_name}/check-updates{endpoint_param}"

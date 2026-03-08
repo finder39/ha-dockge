@@ -79,6 +79,7 @@ class DockgeStackUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensorEnti
         super().__init__(coordinator)
         self._stack_name = stack["name"]
         self._endpoint = stack.get("endpoint", "")
+        self._agent_name = agent_name
         self._attr_unique_id = f"{entry.entry_id}_stack_{self._endpoint}_{self._stack_name}"
         self._attr_name = "Update Available"
         self._attr_device_info = stack_device_info(
@@ -104,12 +105,17 @@ class DockgeStackUpdateAvailableBinarySensor(CoordinatorEntity, BinarySensorEnti
     @property
     def extra_state_attributes(self) -> dict:
         stack = self._get_stack()
+        base = {
+            "stack_name": self._stack_name,
+            "agent_name": self._agent_name,
+            "processing": self.coordinator.is_stack_busy(self._endpoint, self._stack_name),
+        }
         if not stack:
-            return {"processing": self.coordinator.is_stack_busy(self._endpoint, self._stack_name)}
+            return base
         return {
+            **base,
             "auto_update_enabled": stack.get("autoUpdate", False),
             "status": stack.get("status"),
-            "processing": self.coordinator.is_stack_busy(self._endpoint, self._stack_name),
         }
 
 

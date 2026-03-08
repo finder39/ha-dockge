@@ -97,3 +97,15 @@ update_all:
 trigger_auto_updates:
   name: Trigger Auto Updates
   description: Run auto-updates on all stacks that have auto-update enabled
+
+system_prune:
+  name: System Prune
+  description: Run Docker system prune to clean up unused images, containers, and networks.
+  fields:
+    agent:
+      name: Agent
+      description: The agent/server to prune. Leave empty for all agents.
+      required: false
+      example: "Gastly"
+      selector:
+        text:
