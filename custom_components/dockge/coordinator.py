@@ -301,13 +301,18 @@ class DockgeCoordinator(DataUpdateCoordinator):
 
     def _handle_sse_event(self, event: str, data: dict) -> None:
         """Handle a received SSE event."""
+        self._reset_watchdog()
+
         if event == "heartbeat":
-            self._reset_watchdog()
             return
 
         if event == "connected":
             _LOGGER.debug("SSE connected event received")
-            self._reset_watchdog()
+            return
+
+        if event == "auto_update_changed":
+            _LOGGER.debug("SSE auto_update_changed: %s", data.get("stack", ""))
+            self.hass.async_create_task(self.async_request_refresh())
             return
 
         if event == "operation_started":
