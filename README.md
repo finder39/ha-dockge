@@ -11,8 +11,10 @@ Monitor update availability across all your Docker stacks, toggle auto-updates p
 
 ## Features
 
+- **Real-time push updates** — connects via Server-Sent Events (SSE) for instant state changes, no polling delay
 - **Update monitoring** — per-stack and per-container binary sensors for available image updates
 - **Container status** — sensors showing each container's state (running, exited, etc.) with image and health details
+- **Processing state** — entities show when operations are in progress, regardless of trigger source (HA, Dockge UI, scheduler, API)
 - **Auto-update control** — per-stack switches to enable/disable automatic updates
 - **Update actions** — buttons to update individual stacks, check for updates, update all, or trigger a scheduled run
 - **Scheduler status** — sensor showing auto-update scheduler state, cron expression, and next run times
@@ -49,7 +51,7 @@ Or click the button above to add the repository directly.
 2. Search for **Dockge**
 3. Enter your Dockge URL (e.g., `http://192.168.1.100:5001`)
 4. Enter your API key
-5. Optionally adjust the scan interval (default: 300 seconds)
+5. Optionally adjust the scan interval (default: 600 seconds — SSE handles real-time updates, polling is a fallback)
 
 ## Entities
 
@@ -99,6 +101,12 @@ For a visual dashboard, check out the [Dockge Card](https://github.com/finder39/
 
 - [Home Assistant Community Forum thread](https://community.home-assistant.io/t/hacs-dockge-monitor-and-manage-docker-stacks-from-home-assistant/992901)
 - [GitHub Issues](https://github.com/finder39/ha-dockge/issues)
+
+## How It Works
+
+The integration connects to Dockge's `GET /api/events` SSE endpoint for real-time push notifications. When any operation happens — whether triggered from HA, the Dockge UI, the scheduler, or the API — entities update instantly. Polling (every 600s by default) acts as a safety net in case the SSE connection drops.
+
+Requires Dockge v2.2.0+ for SSE support. Falls back to polling gracefully with older versions.
 
 ## Vibecoded
 
