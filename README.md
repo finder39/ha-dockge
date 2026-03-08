@@ -91,6 +91,10 @@ All services are available under the `dockge` domain (e.g., `dockge.start_stack`
 | `trigger_auto_updates` | _(none)_ | Trigger auto-updates on all stacks with auto-update enabled |
 | `system_prune` | `agent`? | Run Docker system prune to clean up unused images, containers, and networks |
 
+## Dashboard Card
+
+For a visual dashboard, check out the [Dockge Card](https://github.com/finder39/dockge-card) — a custom Lovelace card that auto-discovers your servers and stacks with real-time status, actions, and processing indicators.
+
 ## Community
 
 - [Home Assistant Community Forum thread](https://community.home-assistant.io/t/hacs-dockge-monitor-and-manage-docker-stacks-from-home-assistant/992901)
