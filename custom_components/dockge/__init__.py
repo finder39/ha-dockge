@@ -59,6 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         finally:
             coordinator.mark_done(endpoint, stack_name)
             await coordinator.async_request_refresh()
+            coordinator.start_refresh_burst()
 
     def _make_stack_handler(action_path: str):
         async def handler(call) -> None:
@@ -95,6 +96,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for ep, name in busy_keys:
                 coordinator.mark_done(ep, name)
             await coordinator.async_request_refresh()
+            coordinator.start_refresh_burst()
 
     hass.services.async_register(
         DOMAIN, "update_all", _handle_update_all,
@@ -104,6 +106,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def _handle_trigger_auto_updates(call) -> None:
         await coordinator.api_call("POST", "/api/scheduler/trigger")
         await coordinator.async_request_refresh()
+        coordinator.start_refresh_burst()
 
     hass.services.async_register(
         DOMAIN, "trigger_auto_updates", _handle_trigger_auto_updates,

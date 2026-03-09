@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -24,6 +25,7 @@ class DockgeCoordinator(DataUpdateCoordinator):
         self.url = entry.data[CONF_URL].rstrip("/")
         self.api_key = entry.data[CONF_API_KEY]
         self._busy_stacks: set[str] = set()
+        self._refresh_burst_task: asyncio.Task | None = None
         scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
         super().__init__(
@@ -158,3 +160,25 @@ class DockgeCoordinator(DataUpdateCoordinator):
         self._busy_stacks.discard(key)
         _LOGGER.debug("Stack marked DONE: %s (busy set: %s)", key, self._busy_stacks)
         self.async_set_updated_data({**self.data})
+
+    def start_refresh_burst(self) -> None:
+        """Start polling every 30s for 5 minutes, then revert to normal interval.
+
+        Cancels any existing burst so calls don't stack up.
+        """
+        if self._refresh_burst_task is not None:
+            self._refresh_burst_task.cancel()
+        self._refresh_burst_task = self.hass.async_create_background_task(
+            self._run_refresh_burst(), "dockge_refresh_burst"
+        )
+
+    async def _run_refresh_burst(self) -> None:
+        """Poll every 30s for 5 minutes."""
+        try:
+            for _ in range(10):  # 10 × 30s = 5 minutes
+                await asyncio.sleep(30)
+                await self.async_request_refresh()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self._refresh_burst_task = None
