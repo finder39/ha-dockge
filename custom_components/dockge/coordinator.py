@@ -160,7 +160,7 @@ class DockgeCoordinator(DataUpdateCoordinator):
                         f"{self.url}{path}",
                         headers=self._headers(),
                         json=json,
-                        timeout=aiohttp.ClientTimeout(total=30),
+                        timeout=aiohttp.ClientTimeout(total=600),
                     ) as resp:
                         resp.raise_for_status()
                         try:

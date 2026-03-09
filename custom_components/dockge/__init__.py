@@ -56,13 +56,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator.mark_busy(endpoint, stack_name)
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
-            await coordinator.api_call(
+            result = await coordinator.api_call(
                 "POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}",
                 retry=retry,
             )
-        finally:
+        except Exception:
             coordinator.mark_done(endpoint, stack_name)
-            await coordinator.async_request_refresh()
+            raise
+        # For self-updates, Voltorb waits for agent reconnect and sends
+        # operation_completed via SSE — don't clear busy here
+        if isinstance(result, dict) and result.get("selfUpdate"):
+            return
+        # For normal operations, the API blocks until done — safe to clear.
+        # SSE may have already cleared it (idempotent).
+        coordinator.mark_done(endpoint, stack_name)
+        await coordinator.async_request_refresh()
 
     def _make_stack_handler(action_path: str, *, retry: bool = False):
         async def handler(call) -> None:
@@ -95,10 +103,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await coordinator.api_call("POST", f"/api/update-all{endpoint_param}", retry=True)
-        finally:
+        except Exception:
             for ep, name in busy_keys:
                 coordinator.mark_done(ep, name)
-            await coordinator.async_request_refresh()
+            raise
+        # API blocks until all updates finish — safe to clear.
+        # Self-update stacks will get re-marked by SSE operation_completed later.
+        for ep, name in busy_keys:
+            coordinator.mark_done(ep, name)
+        await coordinator.async_request_refresh()
 
     hass.services.async_register(
         DOMAIN, "update_all", _handle_update_all,
