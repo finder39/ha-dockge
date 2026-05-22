@@ -71,7 +71,7 @@ Or click the button above to add the repository directly.
 |------|--------|-------------|
 | Binary Sensor | Update Available | On when stack has image updates |
 | Binary Sensor | {container} Update Available | On when a specific container has updates |
-| Sensor | {container} | Container state with image and health attributes |
+| Sensor | {container} | Container state with image, optional OCI image version, and health attributes |
 | Button | Update | Pull latest images and recreate the stack |
 | Button | Check Updates | Check for new image updates |
 | Switch | Auto Update | Enable/disable auto-updates for this stack |

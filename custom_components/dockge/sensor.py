@@ -169,6 +169,7 @@ class DockgeContainerSensor(CoordinatorEntity, SensorEntity):
             "image": image,
             "image_name": image_name,
             "image_tag": image_tag,
+            "image_version": svc.get("imageVersion"),
             "status": svc.get("status"),
             "health": svc.get("health"),
             "stack_name": self._stack_name,
