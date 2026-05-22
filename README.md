@@ -15,6 +15,7 @@ Monitor update availability across all your Docker stacks, toggle auto-updates p
 - **Container status** — sensors showing each container's state (running, exited, etc.) with image and health details
 - **Auto-update control** — per-stack switches to enable/disable automatic updates
 - **Update actions** — buttons to update individual stacks, check for updates, update all, or trigger a scheduled run
+- **Home Assistant update entities** — install stack image updates directly from HA's Updates view or the stack device page
 - **Scheduler status** — sensor showing auto-update scheduler state, cron expression, and next run times
 - **Update history** — sensor tracking the most recent stack update with result details
 - **Multi-agent support** — works with multiple Dockge agents, each with their own device hierarchy
@@ -70,6 +71,7 @@ Or click the button above to add the repository directly.
 | Type | Entity | Description |
 |------|--------|-------------|
 | Binary Sensor | Update Available | On when stack has image updates |
+| Update | Image Update | Install available image updates for this stack directly from Home Assistant |
 | Binary Sensor | {container} Update Available | On when a specific container has updates |
 | Sensor | {container} | Container state with image and health attributes |
 | Button | Update | Pull latest images and recreate the stack |
