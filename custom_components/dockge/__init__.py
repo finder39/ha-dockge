@@ -14,7 +14,7 @@ from .coordinator import DockgeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor", "button", "switch"]
+PLATFORMS = ["sensor", "binary_sensor", "button", "switch", "update"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -209,6 +209,7 @@ def _cleanup_stale_devices(
         ep = stack.get("endpoint", "")
         sname = stack["name"]
         valid_unique_ids.add(f"{eid}_update_{ep}_{sname}")
+        valid_unique_ids.add(f"{eid}_stack_update_{ep}_{sname}")
         valid_unique_ids.add(f"{eid}_check_updates_{ep}_{sname}")
         valid_unique_ids.add(f"{eid}_auto_update_{ep}_{sname}")
 
@@ -227,10 +228,20 @@ def _cleanup_stale_devices(
                     protected_device_ids.add(ident)
 
     # Build set of entity unique_ids belonging to protected devices
-    protected_entity_prefixes = tuple(f"{eid}_" + suffix for ep in empty_agent_endpoints if ep for suffix in [
-        f"container_{ep}_", f"container_update_{ep}_", f"stack_{ep}_",
-        f"update_{ep}_", f"check_updates_{ep}_", f"auto_update_{ep}_",
-    ])
+    protected_entity_prefixes = tuple(
+        f"{eid}_" + suffix
+        for ep in empty_agent_endpoints
+        if ep
+        for suffix in [
+            f"container_{ep}_",
+            f"container_update_{ep}_",
+            f"stack_{ep}_",
+            f"update_{ep}_",
+            f"stack_update_{ep}_",
+            f"check_updates_{ep}_",
+            f"auto_update_{ep}_",
+        ]
+    )
 
     # Remove stale entities — but skip entities belonging to disconnected agents
     for ent in er.async_entries_for_config_entry(entity_reg, entry.entry_id):
