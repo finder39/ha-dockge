@@ -30,6 +30,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    def _async_cleanup_stale_devices() -> None:
+        """Remove Dockge devices/entities that disappeared from API data."""
+        _cleanup_stale_devices(hass, entry, coordinator)
+
+    _async_cleanup_stale_devices()
+    entry.async_on_unload(coordinator.async_add_listener(_async_cleanup_stale_devices))
+
     # Register services
     def _resolve_endpoint(agent_name: str) -> str:
         """Resolve agent display name to endpoint. Empty string = primary."""
@@ -123,11 +130,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN, "system_prune", _handle_system_prune,
         schema=vol.Schema({vol.Optional("agent", default=""): cv.string}),
     )
-
-    # NOTE: We intentionally do NOT auto-delete stale devices/entities.
-    # Agents and stacks that are temporarily offline would get removed and
-    # reappear on next poll, which is jarring. Instead, users can manually
-    # delete stale devices from the HA device page.
 
     return True
 

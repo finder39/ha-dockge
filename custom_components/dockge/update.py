@@ -98,14 +98,44 @@ class DockgeStackUpdateEntity(CoordinatorEntity, UpdateEntity):
         return None
 
     @staticmethod
-    def _service_images(stack: dict) -> list[str]:
-        """Return service image names from a stack."""
+    def _split_image(image: str) -> tuple[str, str]:
+        """Split 'registry/name:tag' into (name, tag)."""
+        if ":" in image and not image.endswith(":"):
+            name, tag = image.rsplit(":", 1)
+            if "/" not in tag:
+                return name, tag
+        return image, "latest"
+
+    @classmethod
+    def _service_versions(cls, stack: dict) -> list[dict[str, str | None]]:
+        """Return service image versions from a stack."""
         services = stack.get("services") or {}
-        return [
-            image
-            for service in services.values()
-            if (image := service.get("image"))
-        ]
+        versions: list[dict[str, str | None]] = []
+        for name, service in services.items():
+            image = service.get("image", "")
+            _, image_tag = cls._split_image(image)
+            versions.append({
+                "name": name,
+                "image": image,
+                "version": service.get("imageVersion") or image_tag or None,
+                "oci_version": service.get("imageVersion"),
+                "image_tag": image_tag,
+            })
+        return versions
+
+    @classmethod
+    def _format_stack_version(cls, stack: dict) -> str | None:
+        """Return the best user-facing version for a stack."""
+        versions = cls._service_versions(stack)
+        if not versions:
+            return stack.get("status") or "installed"
+        if len(versions) == 1:
+            return versions[0]["version"]
+        return ", ".join(
+            f"{service['name']}: {service['version']}"
+            for service in versions
+            if service["version"]
+        ) or None
 
     @property
     def available(self) -> bool:
@@ -124,12 +154,11 @@ class DockgeStackUpdateEntity(CoordinatorEntity, UpdateEntity):
 
     @property
     def installed_version(self) -> str | None:
-        """Return the currently installed stack image set."""
+        """Return the currently installed stack image version set."""
         stack = self._get_stack()
         if not stack:
             return None
-        images = self._service_images(stack)
-        return ", ".join(images) if images else stack.get("status") or "installed"
+        return self._format_stack_version(stack)
 
     @property
     def latest_version(self) -> str | None:
@@ -169,6 +198,7 @@ class DockgeStackUpdateEntity(CoordinatorEntity, UpdateEntity):
             **base,
             "auto_update_enabled": stack.get("autoUpdate", False),
             "status": stack.get("status"),
+            "service_versions": self._service_versions(stack),
             "updateable_services": updateable_services,
             "updateable_service_count": len(updateable_services),
         }

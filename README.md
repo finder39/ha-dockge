@@ -71,7 +71,7 @@ Or click the button above to add the repository directly.
 | Type | Entity | Description |
 |------|--------|-------------|
 | Binary Sensor | Update Available | On when stack has image updates |
-| Update | Image Update | Install available image updates for this stack directly from Home Assistant |
+| Update | Image Update | Install available image updates for this stack directly from Home Assistant; installed version prefers the OCI `org.opencontainers.image.version` label |
 | Binary Sensor | {container} Update Available | On when a specific container has updates |
 | Sensor | {container} | Container state with image, optional OCI image version, and health attributes |
 | Button | Update | Pull latest images and recreate the stack |
