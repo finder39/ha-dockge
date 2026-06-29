@@ -63,6 +63,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await coordinator.api_call("POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}", timeout=300)
+            if action_path == "update":
+                await coordinator.refresh_stack_update_state(stack_name, endpoint)
         finally:
             coordinator.mark_done(endpoint, stack_name)
             await coordinator.async_request_refresh()
@@ -99,6 +101,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await coordinator.api_call("POST", f"/api/update-all{endpoint_param}")
+            await asyncio.gather(*(
+                coordinator.refresh_stack_update_state(name, ep)
+                for ep, name in busy_keys
+            ))
         finally:
             for ep, name in busy_keys:
                 coordinator.mark_done(ep, name)

@@ -96,6 +96,10 @@ class DockgeUpdateStackButton(CoordinatorEntity, ButtonEntity):
             await self.coordinator.api_call(
                 "POST", f"/api/stacks/{self._stack_name}/update{endpoint_param}"
             )
+            await self.coordinator.refresh_stack_update_state(
+                self._stack_name,
+                self._endpoint,
+            )
         finally:
             self.coordinator.mark_done(self._endpoint, self._stack_name)
             await self.coordinator.async_request_refresh()
