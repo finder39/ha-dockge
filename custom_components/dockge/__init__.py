@@ -14,7 +14,7 @@ from .coordinator import DockgeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor", "button", "switch"]
+PLATFORMS = ["sensor", "binary_sensor", "button", "switch", "update"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -29,6 +29,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    def _async_cleanup_stale_devices() -> None:
+        """Remove Dockge devices/entities that disappeared from API data."""
+        _cleanup_stale_devices(hass, entry, coordinator)
+
+    _async_cleanup_stale_devices()
+    entry.async_on_unload(coordinator.async_add_listener(_async_cleanup_stale_devices))
 
     # Register services
     def _resolve_endpoint(agent_name: str) -> str:
@@ -56,6 +63,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await coordinator.api_call("POST", f"/api/stacks/{stack_name}/{action_path}{endpoint_param}", timeout=300)
+            if action_path == "update":
+                await coordinator.refresh_stack_update_state(stack_name, endpoint)
         finally:
             coordinator.mark_done(endpoint, stack_name)
             await coordinator.async_request_refresh()
@@ -92,6 +101,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await asyncio.sleep(0.1)  # Let event loop propagate busy state to frontend
         try:
             await coordinator.api_call("POST", f"/api/update-all{endpoint_param}")
+            await asyncio.gather(*(
+                coordinator.refresh_stack_update_state(name, ep)
+                for ep, name in busy_keys
+            ))
         finally:
             for ep, name in busy_keys:
                 coordinator.mark_done(ep, name)
@@ -123,11 +136,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN, "system_prune", _handle_system_prune,
         schema=vol.Schema({vol.Optional("agent", default=""): cv.string}),
     )
-
-    # NOTE: We intentionally do NOT auto-delete stale devices/entities.
-    # Agents and stacks that are temporarily offline would get removed and
-    # reappear on next poll, which is jarring. Instead, users can manually
-    # delete stale devices from the HA device page.
 
     return True
 
@@ -209,6 +217,7 @@ def _cleanup_stale_devices(
         ep = stack.get("endpoint", "")
         sname = stack["name"]
         valid_unique_ids.add(f"{eid}_update_{ep}_{sname}")
+        valid_unique_ids.add(f"{eid}_stack_update_{ep}_{sname}")
         valid_unique_ids.add(f"{eid}_check_updates_{ep}_{sname}")
         valid_unique_ids.add(f"{eid}_auto_update_{ep}_{sname}")
 
@@ -227,10 +236,20 @@ def _cleanup_stale_devices(
                     protected_device_ids.add(ident)
 
     # Build set of entity unique_ids belonging to protected devices
-    protected_entity_prefixes = tuple(f"{eid}_" + suffix for ep in empty_agent_endpoints if ep for suffix in [
-        f"container_{ep}_", f"container_update_{ep}_", f"stack_{ep}_",
-        f"update_{ep}_", f"check_updates_{ep}_", f"auto_update_{ep}_",
-    ])
+    protected_entity_prefixes = tuple(
+        f"{eid}_" + suffix
+        for ep in empty_agent_endpoints
+        if ep
+        for suffix in [
+            f"container_{ep}_",
+            f"container_update_{ep}_",
+            f"stack_{ep}_",
+            f"update_{ep}_",
+            f"stack_update_{ep}_",
+            f"check_updates_{ep}_",
+            f"auto_update_{ep}_",
+        ]
+    )
 
     # Remove stale entities — but skip entities belonging to disconnected agents
     for ent in er.async_entries_for_config_entry(entity_reg, entry.entry_id):

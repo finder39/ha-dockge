@@ -138,6 +138,23 @@ class DockgeCoordinator(DataUpdateCoordinator):
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Dockge API call failed: {err}") from err
 
+    async def refresh_stack_update_state(self, stack_name: str, endpoint: str) -> None:
+        """Refresh Dockge's cached update state for a stack after an update."""
+        endpoint_param = f"?endpoint={endpoint}" if endpoint else ""
+        try:
+            await self.api_call(
+                "POST",
+                f"/api/stacks/{stack_name}/check-updates{endpoint_param}",
+                timeout=300,
+            )
+        except UpdateFailed as err:
+            _LOGGER.warning(
+                "Failed to refresh update state for stack %s on endpoint %s: %s",
+                stack_name,
+                endpoint or "primary",
+                err,
+            )
+
     def _busy_key(self, endpoint: str, stack_name: str) -> str:
         """Build a unique key for a busy stack."""
         return f"{endpoint}_{stack_name}"
