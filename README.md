@@ -51,6 +51,16 @@ Or click the button above to add the repository directly.
 4. Enter your API key
 5. Optionally adjust the scan interval (default: 300 seconds)
 
+### Options
+
+Click **Configure** on the Dockge integration to change these. Saving reloads the integration, so there is no need to remove and re-add it.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| Hide stacks not managed by Dockge | Off | Dockge also lists every other Compose project it finds with `docker compose ls` (dev stacks, projects started by hand). With this on, only stacks that have a folder in Dockge's stacks directory get devices and entities, and the ones already created for the others are removed. |
+
+Devices for stacks that no longer exist can be deleted from the device page.
+
 ## Entities
 
 ### Agent-level (Dockge Server device)

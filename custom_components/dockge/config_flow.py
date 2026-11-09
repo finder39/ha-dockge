@@ -5,9 +5,22 @@ from __future__ import annotations
 import aiohttp
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
+from homeassistant.core import callback
 
-from .const import CONF_API_KEY, CONF_SCAN_INTERVAL, CONF_URL, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_API_KEY,
+    CONF_HIDE_UNMANAGED,
+    CONF_SCAN_INTERVAL,
+    CONF_URL,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
@@ -24,6 +37,12 @@ class DockgeConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Dockge."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> DockgeOptionsFlow:
+        """Return the options flow (the integration's Configure dialog)."""
+        return DockgeOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict | None = None
@@ -65,4 +84,25 @@ class DockgeConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
             errors=errors,
+        )
+
+
+class DockgeOptionsFlow(OptionsFlowWithReload):
+    """Options for Dockge. Saving reloads the entry, so changes apply straight away."""
+
+    async def async_step_init(
+        self, user_input: dict | None = None
+    ) -> ConfigFlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        schema = vol.Schema(
+            {vol.Optional(CONF_HIDE_UNMANAGED, default=False): bool}
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self.config_entry.options
+            ),
         )
