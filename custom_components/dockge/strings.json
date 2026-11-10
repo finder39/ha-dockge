@@ -19,5 +19,19 @@
     "abort": {
       "already_configured": "This Dockge instance is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dockge options",
+        "description": "Dockge also lists Compose projects that live outside its stacks folder (for example dev stacks started by hand). Hide them here. Changes apply as soon as you submit.",
+        "data": {
+          "hide_unmanaged": "Hide stacks not managed by Dockge"
+        },
+        "data_description": {
+          "hide_unmanaged": "Hides stacks without a folder in Dockge's stacks directory, and removes their devices and entities."
+        }
+      }
+    }
   }
 }

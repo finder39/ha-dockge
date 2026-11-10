@@ -9,8 +9,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv, device_registry as dr, entity_registry as er
 
+from homeassistant.helpers.device_registry import DeviceEntry
+
 from .const import DOMAIN
 from .coordinator import DockgeCoordinator
+from .stacks import active_device_identifiers, stack_device_identifier
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +31,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
+    # With "hide unmanaged stacks" on, drop devices/entities already created for them
+    # (before the platforms run, so they aren't recreated). Switching the option off
+    # simply lets the next setup create them again.
+    if coordinator.hide_unmanaged:
+        _remove_hidden_stack_devices(hass, entry, coordinator.data.get("hidden_stacks") or [])
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Register services
@@ -141,6 +151,34 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+) -> bool:
+    """Let users delete a device from the UI once Dockge no longer provides it."""
+    coordinator = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
+    if coordinator is None or not coordinator.data:
+        return True
+    active = active_device_identifiers(config_entry.entry_id, coordinator.data)
+    return not device_entry.identifiers & active
+
+
+def _remove_hidden_stack_devices(
+    hass: HomeAssistant, entry: ConfigEntry, hidden_stacks: list[dict]
+) -> None:
+    """Remove the devices (and their entities) of stacks the option hides."""
+    device_reg = dr.async_get(hass)
+    entity_reg = er.async_get(hass)
+    for stack in hidden_stacks:
+        ident = stack_device_identifier(entry.entry_id, stack.get("endpoint", ""), stack["name"])
+        device = device_reg.async_get_device(identifiers={ident})
+        if device is None:
+            continue
+        for ent in er.async_entries_for_device(entity_reg, device.id, include_disabled_entities=True):
+            entity_reg.async_remove(ent.entity_id)
+        _LOGGER.info("Removing device for unmanaged stack hidden by option: %s", device.name)
+        device_reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
 
 
 def _cleanup_stale_devices(

@@ -12,7 +12,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import CONF_API_KEY, CONF_SCAN_INTERVAL, CONF_URL, DEFAULT_SCAN_INTERVAL
+from .const import CONF_API_KEY, CONF_HIDE_UNMANAGED, CONF_SCAN_INTERVAL, CONF_URL, DEFAULT_SCAN_INTERVAL
+from .stacks import split_unmanaged
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class DockgeCoordinator(DataUpdateCoordinator):
         """Initialize the coordinator."""
         self.url = entry.data[CONF_URL].rstrip("/")
         self.api_key = entry.data[CONF_API_KEY]
+        self.hide_unmanaged = bool(entry.options.get(CONF_HIDE_UNMANAGED, False))
         self._busy_stacks: set[str] = set()
         self._refresh_burst_task: asyncio.Task | None = None
         scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
@@ -86,6 +88,8 @@ class DockgeCoordinator(DataUpdateCoordinator):
         # Unwrap API envelope responses
         agents = agents_resp.get("agents", []) if isinstance(agents_resp, dict) else []
         stacks = stacks_resp.get("stacks", []) if isinstance(stacks_resp, dict) else []
+        # Dockge also lists Compose projects outside its stacks folder; optionally drop them.
+        stacks, hidden_stacks = split_unmanaged(stacks, self.hide_unmanaged)
         scheduler = scheduler_resp if isinstance(scheduler_resp, dict) else {}
         history_entries = history_resp.get("entries", []) if isinstance(history_resp, dict) else []
         last_update = history_entries[0] if history_entries else None
@@ -115,6 +119,7 @@ class DockgeCoordinator(DataUpdateCoordinator):
             "agent_names": agent_names,
             "multi_agent": multi_agent,
             "stacks": stacks,
+            "hidden_stacks": hidden_stacks,
             "scheduler": scheduler,
             "last_update": last_update,
         }
